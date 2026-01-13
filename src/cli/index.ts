@@ -1,9 +1,35 @@
 import { createReadStream, createWriteStream } from "../io/streams";
 
-const [, , inputPath, outputPath] = process.argv;
+const args = process.argv.slice(2);
+const consumedArgs = new Set<number>();
+
+const readFlagValue = (flag: string): string | undefined => {
+  const index = args.indexOf(flag);
+  if (index === -1) {
+    return undefined;
+  }
+
+  consumedArgs.add(index);
+  const value = args[index + 1];
+  if (value) {
+    consumedArgs.add(index + 1);
+  }
+  return value;
+};
+
+const inputFlag = readFlagValue("--input");
+const outputFlag = readFlagValue("--output");
+const positionalArgs = args.filter(
+  (value, index) => !consumedArgs.has(index) && !value.startsWith("--")
+);
+
+const inputPath = inputFlag ?? positionalArgs[0];
+const outputPath = outputFlag ?? positionalArgs[1];
 
 if (!inputPath || !outputPath) {
-  console.error("Usage: json-analyzer <input.json> <output.bin>");
+  console.error(
+    "Usage: json-analyzer <input.json> <output.bin> or json-analyzer --input <input.json> --output <output.bin>"
+  );
   process.exit(1);
 }
 
