@@ -8,7 +8,9 @@
     "start": "node dist/cli/index.js",
     "lint": "eslint . --ext .ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "stream-json": "^1.8.0"
+  },
   "devDependencies": {
     "@types/node": "^20.11.30",
     "eslint": "^8.57.0",
