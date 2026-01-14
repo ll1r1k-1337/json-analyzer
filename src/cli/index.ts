@@ -1,4 +1,7 @@
+import { once } from "node:events";
+import { BinaryTokenWriter } from "../binary/writer";
 import { createReadStream, createWriteStream } from "../io/streams";
+import { parseJsonStream } from "../index";
 
 const args = process.argv.slice(2);
 const consumedArgs = new Set<number>();
@@ -42,63 +45,35 @@ process.on("SIGINT", () => {
   }
 });
 
-const readJson = (path: string, signal: AbortSignal): Promise<unknown> =>
-  new Promise((resolve, reject) => {
-    const stream = createReadStream(path, signal);
-    let data = "";
-
-    stream.on("data", (chunk: string) => {
-      data += chunk;
-    });
-
-    stream.on("error", (error) => {
-      stream.destroy();
-      reject(new Error(`Failed to read input file "${path}": ${error.message}`));
-    });
-
-    stream.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        reject(new Error(`Invalid JSON in "${path}": ${message}`));
-      }
-    });
-  });
-
-const writeOutput = (path: string, payload: Buffer, signal: AbortSignal): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const stream = createWriteStream(path, signal);
-
-    stream.on("error", (error) => {
-      stream.destroy();
-      reject(new Error(`Failed to write output file "${path}": ${error.message}`));
-    });
-
-    stream.on("finish", () => {
-      resolve();
-    });
-
-    stream.write(payload, (error) => {
-      if (error) {
-        stream.destroy();
-        reject(new Error(`Failed to write output file "${path}": ${error.message}`));
-        return;
-      }
-
-      stream.end();
-    });
-  });
+const createStreamError = (label: string, path: string, error: Error): Error =>
+  new Error(`Failed to ${label} "${path}": ${error.message}`);
 
 const run = async (): Promise<void> => {
   try {
     console.log(`Input JSON: ${inputPath}`);
     console.log(`Output binary: ${outputPath}`);
 
-    const json = await readJson(inputPath, abortController.signal);
-    const payload = Buffer.from(JSON.stringify(json), "utf8");
+    const readStream = createReadStream(inputPath, abortController.signal);
+    const writeStream = createWriteStream(outputPath, abortController.signal);
+    const writer = new BinaryTokenWriter(writeStream);
 
-    await writeOutput(outputPath, payload, abortController.signal);
+    const readError = once(readStream, "error").then(([error]) => {
+      throw createStreamError("read input file", inputPath, error as Error);
+    });
+    const writeError = once(writeStream, "error").then(([error]) => {
+      throw createStreamError("write output file", outputPath, error as Error);
+    });
+
+    await Promise.race([
+      (async () => {
+        await parseJsonStream(readStream, writer);
+        await writer.finalize();
+        writeStream.end();
+        await once(writeStream, "finish");
+      })(),
+      readError,
+      writeError,
+    ]);
 
     console.log("Success: output written.");
   } catch (error) {
