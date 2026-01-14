@@ -38,11 +38,11 @@ describe("end-to-end binary output", () => {
 
     const tokenStreamOffset = Number(trailer.readBigUInt64LE(12));
     const tokenStreamLength = Number(trailer.readBigUInt64LE(20));
-    const tokenStream = tokenStreamOutput.subarray(
+    const tokenStreamSlice = tokenStreamOutput.subarray(
       tokenStreamOffset,
       tokenStreamOffset + tokenStreamLength
     );
-    expect(tokenStream.includes(TokenType.StartObject)).toBe(true);
-    expect(tokenStream.includes(TokenType.EndObject)).toBe(true);
+    expect(tokenStreamSlice.includes(TokenType.StartObject)).toBe(true);
+    expect(tokenStreamSlice.includes(TokenType.EndObject)).toBe(true);
   });
 });
