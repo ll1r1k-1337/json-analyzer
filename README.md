@@ -12,6 +12,8 @@ node dist/cli/index.js --input big.json --output-bin big.bin --output-meta big.m
 Параметры:
 
 - `--input` — путь к входному JSON-файлу.
+- `--output` — базовый путь к выходному бинарному файлу с токенами (файл `.meta`
+  будет создан рядом).
 - `--output-bin` — путь к выходному бинарному файлу с токенами.
 - `--output-meta` — путь к файлу метаданных (строковая таблица, индекс, трейлер).
 
@@ -20,6 +22,9 @@ node dist/cli/index.js --input big.json --output-bin big.bin --output-meta big.m
 ```bash
 node dist/cli/index.js input.json output.bin output.meta
 ```
+
+Если указан только `--output`, то файл метаданных будет создан как
+`<output>.meta` либо с заменой расширения `.bin` на `.meta`.
 
 Файлы формата:
 

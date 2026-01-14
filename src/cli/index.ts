@@ -21,6 +21,7 @@ const readFlagValue = (flag: string): string | undefined => {
 };
 
 const inputFlag = readFlagValue("--input");
+const outputFlag = readFlagValue("--output");
 const outputBinFlag = readFlagValue("--output-bin");
 const outputMetaFlag = readFlagValue("--output-meta");
 const positionalArgs = args.filter(
@@ -28,13 +29,21 @@ const positionalArgs = args.filter(
 );
 
 const inputPath = inputFlag ?? positionalArgs[0];
-const outputBinPath = outputBinFlag ?? positionalArgs[1];
-const outputMetaPath = outputMetaFlag ?? positionalArgs[2];
+const outputBinPath = outputBinFlag ?? positionalArgs[1] ?? outputFlag;
+const outputMetaPath =
+  outputMetaFlag ??
+  positionalArgs[2] ??
+  (outputFlag
+    ? outputFlag.endsWith(".bin")
+      ? outputFlag.replace(/\.bin$/i, ".meta")
+      : `${outputFlag}.meta`
+    : undefined);
 
 if (!inputPath || !outputBinPath || !outputMetaPath) {
   console.error(
     "Usage: json-analyzer <input.json> <output.bin> <output.meta> " +
-      "or json-analyzer --input <input.json> --output-bin <output.bin> --output-meta <output.meta>"
+      "or json-analyzer --input <input.json> --output-bin <output.bin> --output-meta <output.meta> " +
+      "or json-analyzer --input <input.json> --output <output.bin>"
   );
   process.exit(1);
 }
