@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "example:parse": "node examples/parse-to-binary.mjs",
+    "benchmark:parse": "node benchmarks/bench-parse.mjs",
     "test": "vitest run",
     "start": "node dist/cli/index.js",
     "lint": "eslint . --ext .ts"

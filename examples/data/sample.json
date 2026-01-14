@@ -1,0 +1,14 @@
+{
+  "project": "json-analyzer",
+  "version": 1,
+  "tags": ["cli", "stream", "binary"],
+  "meta": {
+    "createdBy": "examples",
+    "active": true
+  },
+  "items": [
+    {"id": 1, "name": "alpha", "price": 10.5},
+    {"id": 2, "name": "beta", "price": 20.0},
+    {"id": 3, "name": "gamma", "price": 30.25}
+  ]
+}

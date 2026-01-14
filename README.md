@@ -71,6 +71,21 @@ if (token.type === TokenType.StartObject) {
 await reader.close();
 ```
 
+## Примеры и бенчмарки
+
+В репозитории есть отдельные папки:
+
+- `examples` — готовые скрипты для демонстрации работы.
+- `benchmarks` — простые бенчмарки с генерацией тестовых данных.
+
+Быстрый старт:
+
+```bash
+npm run build
+npm run example:parse
+npm run benchmark:parse
+```
+
 ## Ограничения и рекомендации
 
 - CLI-режим использует потоковый парсер, но `BinaryTokenWriter` буферизует токены
