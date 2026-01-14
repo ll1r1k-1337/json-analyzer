@@ -6,19 +6,25 @@
 
 ```bash
 npm run build
-node dist/cli/index.js --input big.json --output big.bin
+node dist/cli/index.js --input big.json --output-bin big.bin --output-meta big.meta
 ```
 
 Параметры:
 
 - `--input` — путь к входному JSON-файлу.
-- `--output` — путь к выходному бинарному файлу.
+- `--output-bin` — путь к выходному бинарному файлу с токенами.
+- `--output-meta` — путь к файлу метаданных (строковая таблица, индекс, трейлер).
 
 Также поддерживается позиционный вызов:
 
 ```bash
-node dist/cli/index.js input.json output.bin
+node dist/cli/index.js input.json output.bin output.meta
 ```
+
+Файлы формата:
+
+- `*.bin` содержит только поток токенов.
+- `*.meta` содержит заголовок, строковую таблицу, индекс оффсетов и трейлер.
 
 ### Модульное API
 
@@ -43,8 +49,9 @@ await parseJsonStream(createReadStream("input.json"), writer);
 
 ## Ограничения и рекомендации
 
-- CLI-режим сейчас читает весь JSON целиком в память, поэтому для больших файлов
-  потребление памяти примерно соответствует размеру входа.
+- CLI-режим использует потоковый парсер, но `BinaryTokenWriter` буферизует токены
+  и таблицу строк до финализации, поэтому пиковое потребление памяти зависит от
+  объема токенизированных данных.
 - Для потоковой обработки используйте модульное API `parseJsonStream`, чтобы
   избежать пикового использования памяти.
 - В `src/io/streams.ts` заданы значения `highWaterMark` по умолчанию:
