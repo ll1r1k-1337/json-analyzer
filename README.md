@@ -43,6 +43,25 @@ const writer: BinaryWriter = {
 await parseJsonStream(createReadStream("input.json"), writer);
 ```
 
+### Чтение бинарного формата
+
+```ts
+import { BinaryTokenReader, TokenType } from "./src/index";
+
+const reader = await BinaryTokenReader.fromFile("output.bin");
+const header = reader.getHeader();
+const trailer = reader.getTrailer();
+const strings = reader.getStringTable();
+const index = reader.getIndex();
+
+const { token } = await reader.readTokenAt(index[0].tokenOffset);
+if (token.type === TokenType.StartObject) {
+  // чтение следующего токена по адресу
+}
+
+await reader.close();
+```
+
 ## Ограничения и рекомендации
 
 - CLI использует потоковый парсинг и подходит для больших файлов без полного
