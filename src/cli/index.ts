@@ -48,7 +48,21 @@ process.on("SIGINT", () => {
   }
 });
 
+const watchStreamError = (
+  stream: NodeJS.ReadableStream,
+  message: string,
+  cleanup: Array<() => void>
+): Promise<never> =>
+  new Promise((_, reject) => {
+    const onError = (error: Error) => {
+      reject(new Error(`${message}: ${error.message}`));
+    };
+    stream.once("error", onError);
+    cleanup.push(() => stream.off("error", onError));
+  });
+
 const run = async (): Promise<void> => {
+  const cleanupHandlers: Array<() => void> = [];
   try {
     console.log(`Input JSON: ${inputPath}`);
     console.log(`Output token stream: ${outputBinPath}`);
@@ -58,15 +72,21 @@ const run = async (): Promise<void> => {
     const tokenStream = createWriteStream(outputBinPath, abortController.signal);
     const metadataStream = createWriteStream(outputMetaPath, abortController.signal);
     const streamErrors = [
-      once(readStream, "error").then(([error]) => {
-        throw new Error(`Failed to read input file "${inputPath}": ${error.message}`);
-      }),
-      once(tokenStream, "error").then(([error]) => {
-        throw new Error(`Failed to write output file "${outputBinPath}": ${error.message}`);
-      }),
-      once(metadataStream, "error").then(([error]) => {
-        throw new Error(`Failed to write output file "${outputMetaPath}": ${error.message}`);
-      }),
+      watchStreamError(
+        readStream,
+        `Failed to read input file "${inputPath}"`,
+        cleanupHandlers
+      ),
+      watchStreamError(
+        tokenStream,
+        `Failed to write output file "${outputBinPath}"`,
+        cleanupHandlers
+      ),
+      watchStreamError(
+        metadataStream,
+        `Failed to write output file "${outputMetaPath}"`,
+        cleanupHandlers
+      ),
     ];
 
     const writer = new BinaryTokenWriter(tokenStream, metadataStream);
@@ -81,6 +101,10 @@ const run = async (): Promise<void> => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
     process.exitCode = 1;
+  } finally {
+    for (const cleanup of cleanupHandlers) {
+      cleanup();
+    }
   }
 };
 
