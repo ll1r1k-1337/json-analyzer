@@ -135,7 +135,10 @@ export class BinaryTokenWriter implements BinaryWriter {
   private tokenLength = 0;
   private finalized = false;
 
-  constructor(private stream: Writable) {}
+  constructor(
+    private tokenStream: Writable,
+    private metadataStream: Writable
+  ) {}
 
   writeStartObject(): void {
     this.recordOffset(OffsetKind.Object);
@@ -204,9 +207,9 @@ export class BinaryTokenWriter implements BinaryWriter {
     const index = encodeOffsets(this.offsets);
 
     const stringTableOffset = BigInt(HEADER_LENGTH);
-    const tokenStreamOffset = BigInt(HEADER_LENGTH + stringTable.length);
+    const tokenStreamOffset = 0n;
     const tokenStreamLength = BigInt(tokenStream.length);
-    const indexOffset = tokenStreamOffset + tokenStreamLength;
+    const indexOffset = BigInt(HEADER_LENGTH + stringTable.length);
     const indexLength = BigInt(index.length);
 
     const checksum = crc32([header, stringTable, tokenStream, index]);
@@ -224,13 +227,16 @@ export class BinaryTokenWriter implements BinaryWriter {
       throw new Error(`Unexpected trailer length: ${trailer.length}`);
     }
 
-    const writer = new BufferedStreamWriter(this.stream);
-    await writer.write(header);
-    await writer.write(stringTable);
-    await writer.write(tokenStream);
-    await writer.write(index);
-    await writer.write(trailer);
-    await writer.end();
+    const tokenWriter = new BufferedStreamWriter(this.tokenStream);
+    await tokenWriter.write(tokenStream);
+    await tokenWriter.end();
+
+    const metadataWriter = new BufferedStreamWriter(this.metadataStream);
+    await metadataWriter.write(header);
+    await metadataWriter.write(stringTable);
+    await metadataWriter.write(index);
+    await metadataWriter.write(trailer);
+    await metadataWriter.end();
   }
 
   private registerString(value: string): number {
