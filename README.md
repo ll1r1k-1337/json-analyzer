@@ -57,7 +57,7 @@ await parseJsonStream(createReadStream("input.json"), writer);
 ```ts
 import { BinaryTokenReader, TokenType } from "./src/index";
 
-const reader = await BinaryTokenReader.fromFile("output.bin");
+const reader = await BinaryTokenReader.fromFiles("output.meta", "output.bin");
 const header = reader.getHeader();
 const trailer = reader.getTrailer();
 const strings = reader.getStringTable();
@@ -83,6 +83,7 @@ await reader.close();
 ```bash
 npm run build
 npm run example:parse
+npm run example:read
 npm run benchmark:parse
 ```
 
