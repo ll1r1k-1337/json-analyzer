@@ -1,7 +1,7 @@
 import { once } from "node:events";
-import { createReadStream, createWriteStream } from "../io/streams";
-import { parseJsonStream } from "../parser/streamParser";
-import { BinaryTokenWriter } from "../binary/writer";
+import { createReadStream, createWriteStream } from "../io/streams.js";
+import { parseJsonStream } from "../parser/streamParser.js";
+import { BinaryTokenWriter } from "../binary/writer.js";
 
 const args = process.argv.slice(2);
 const consumedArgs = new Set<number>();
@@ -58,7 +58,7 @@ process.on("SIGINT", () => {
 });
 
 const watchStreamError = (
-  stream: NodeJS.ReadableStream,
+  stream: NodeJS.ReadableStream | NodeJS.WritableStream,
   message: string,
   cleanup: Array<() => void>
 ): Promise<never> =>

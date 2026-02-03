@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import type { BinaryWriter } from "./streamParser";
-import { parseJsonStream } from "./streamParser";
+import type { BinaryWriter } from "./streamParser.js";
+import { parseJsonStream } from "./streamParser.js";
 
 type Event =
   | { type: "startObject" }

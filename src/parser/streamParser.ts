@@ -1,7 +1,8 @@
 import { Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { Readable, Transform } from "node:stream";
-import { parser } from "stream-json";
+import pkg from "stream-json";
+const { parser } = pkg;
 
 export interface BinaryWriter {
   writeStartObject(): void;
