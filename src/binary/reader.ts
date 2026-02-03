@@ -175,12 +175,27 @@ export class BinaryTokenReader {
 
   static async fromBuffer(buffer: Buffer): Promise<BinaryTokenReader> {
     const reader = new BufferReader(buffer);
-    return BinaryTokenReader.fromSource(reader);
+    return BinaryTokenReader.fromStreamSources(reader);
   }
 
   static async fromFile(path: string): Promise<BinaryTokenReader> {
     const reader = await FileReader.create(path);
-    return BinaryTokenReader.fromSource(reader);
+    return BinaryTokenReader.fromStreamSources(reader);
+  }
+
+  static async fromFiles(
+    metaPath: string,
+    binPath: string
+  ): Promise<BinaryTokenReader> {
+    const metaReader = await FileReader.create(metaPath);
+    const binReader = await FileReader.create(binPath);
+    try {
+      return await BinaryTokenReader.fromStreamSources(metaReader, binReader);
+    } catch (error) {
+      if (metaReader.close) await metaReader.close();
+      if (binReader.close) await binReader.close();
+      throw error;
+    }
   }
 
   getHeader(): BinaryHeader {
@@ -251,7 +266,10 @@ export class BinaryTokenReader {
           throw new Error("Unable to read number length");
         }
         const byteLength = lengthBytes.readUInt32LE(0);
-        const numberBytes = await this.readBytes(absoluteOffset + 5n, byteLength);
+        const numberBytes = await this.readBytes(
+          absoluteOffset + 5n,
+          byteLength
+        );
         if (numberBytes.length < byteLength) {
           throw new Error("Unable to read number bytes");
         }
@@ -274,30 +292,60 @@ export class BinaryTokenReader {
     return this.source.read(offsetNumber, length);
   }
 
-  private static async fromSource(reader: RandomAccessReader): Promise<BinaryTokenReader> {
-    if (reader.size < HEADER_LENGTH + TRAILER_LENGTH) {
+  private static async fromStreamSources(
+    metaReader: RandomAccessReader,
+    tokenReader?: RandomAccessReader
+  ): Promise<BinaryTokenReader> {
+    if (metaReader.size < HEADER_LENGTH + TRAILER_LENGTH) {
       throw new Error("Binary file too small to contain header/trailer");
     }
 
-    const header = parseHeader(await reader.read(0, HEADER_LENGTH));
-    const trailer = parseTrailer(await reader.read(reader.size - TRAILER_LENGTH, TRAILER_LENGTH));
+    const header = parseHeader(await metaReader.read(0, HEADER_LENGTH));
+    const trailer = parseTrailer(
+      await metaReader.read(metaReader.size - TRAILER_LENGTH, TRAILER_LENGTH)
+    );
 
-    const stringTableOffset = toNumber(trailer.stringTableOffset, "String table offset");
-    const tokenStreamOffset = toNumber(trailer.tokenStreamOffset, "Token stream offset");
+    const stringTableOffset = toNumber(
+      trailer.stringTableOffset,
+      "String table offset"
+    );
+    const tokenStreamOffset = toNumber(
+      trailer.tokenStreamOffset,
+      "Token stream offset"
+    );
     const indexOffset = toNumber(trailer.indexOffset, "Index offset");
     const indexLength = toNumber(trailer.indexLength, "Index length");
 
-    if (tokenStreamOffset < stringTableOffset) {
-      throw new Error("Token stream offset precedes string table");
+    let source = tokenReader;
+    let stringTableLength: number;
+
+    if (!source) {
+      // Single file mode
+      if (tokenStreamOffset < stringTableOffset) {
+        throw new Error("Token stream offset precedes string table");
+      }
+      source = metaReader;
+      // In single file mode (legacy), tokens follow string table
+      stringTableLength = tokenStreamOffset - stringTableOffset;
+    } else {
+      // Split file mode: string table is followed by index in metadata file
+      stringTableLength = indexOffset - stringTableOffset;
     }
 
-    const stringTableLength = tokenStreamOffset - stringTableOffset;
-    const stringTableBuffer = await reader.read(stringTableOffset, stringTableLength);
+    const stringTableBuffer = await metaReader.read(
+      stringTableOffset,
+      stringTableLength
+    );
     const strings = parseStringTable(stringTableBuffer);
 
-    const indexBuffer = await reader.read(indexOffset, indexLength);
+    const indexBuffer = await metaReader.read(indexOffset, indexLength);
     const index = parseIndex(indexBuffer);
 
-    return new BinaryTokenReader(reader, header, trailer, strings, index);
+    // If we used a separate metaReader, we should close it now as we only need the token source going forward
+    if (source !== metaReader && metaReader.close) {
+      await metaReader.close();
+    }
+
+    return new BinaryTokenReader(source, header, trailer, strings, index);
   }
 }
