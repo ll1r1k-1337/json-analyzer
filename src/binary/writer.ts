@@ -37,20 +37,43 @@ const writeUInt64LE = (value: bigint): Buffer => {
 };
 
 const encodeStringTable = (strings: string[]): Buffer => {
-  const chunks: Buffer[] = [writeUInt32LE(strings.length)];
+  let size = 4;
   for (const value of strings) {
-    const bytes = Buffer.from(value, "utf8");
-    chunks.push(writeUInt32LE(bytes.length), bytes);
+    size += 4 + Buffer.byteLength(value, "utf8");
   }
-  return Buffer.concat(chunks);
+
+  const buffer = Buffer.alloc(size);
+  let offset = 0;
+
+  buffer.writeUInt32LE(strings.length, offset);
+  offset += 4;
+
+  for (const value of strings) {
+    const byteLength = Buffer.byteLength(value, "utf8");
+    buffer.writeUInt32LE(byteLength, offset);
+    offset += 4;
+    buffer.write(value, offset, byteLength, "utf8");
+    offset += byteLength;
+  }
+
+  return buffer;
 };
 
 const encodeOffsets = (offsets: OffsetEntry[]): Buffer => {
-  const chunks: Buffer[] = [writeUInt32LE(offsets.length)];
+  const size = 4 + offsets.length * (1 + 8);
+  const buffer = Buffer.alloc(size);
+  let offset = 0;
+
+  buffer.writeUInt32LE(offsets.length, offset);
+  offset += 4;
+
   for (const entry of offsets) {
-    chunks.push(Buffer.from([entry.kind]), writeUInt64LE(entry.offset));
+    buffer.writeUInt8(entry.kind, offset);
+    offset += 1;
+    buffer.writeBigUInt64LE(entry.offset, offset);
+    offset += 8;
   }
-  return Buffer.concat(chunks);
+  return buffer;
 };
 
 const CRC_TABLE = (() => {
