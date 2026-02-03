@@ -68,8 +68,9 @@ const CRC_TABLE = (() => {
 const crc32 = (buffers: Buffer[]): number => {
   let crc = 0xffffffff;
   for (const buffer of buffers) {
-    for (const byte of buffer) {
-      crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    const len = buffer.length;
+    for (let i = 0; i < len; i += 1) {
+      crc = CRC_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
     }
   }
   return (crc ^ 0xffffffff) >>> 0;
