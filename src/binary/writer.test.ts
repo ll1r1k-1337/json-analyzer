@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import { once } from "node:events";
 import { describe, expect, it } from "vitest";
-import { BinaryTokenWriter } from "./writer";
+import { BinaryTokenWriter } from "./writer.js";
 import {
   FORMAT_MAGIC,
   FORMAT_VERSION,
@@ -9,7 +9,7 @@ import {
   TokenType,
   TRAILER_LENGTH,
   TRAILER_MAGIC,
-} from "./format";
+} from "./format.js";
 
 const collectWriterOutput = async (
   run: (writer: BinaryTokenWriter) => Promise<void> | void,

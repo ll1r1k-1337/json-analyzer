@@ -7,7 +7,7 @@ import {
   TokenType,
   TRAILER_LENGTH,
   TRAILER_MAGIC,
-} from "./format";
+} from "./format.js";
 
 type RandomAccessReader = {
   size: number;

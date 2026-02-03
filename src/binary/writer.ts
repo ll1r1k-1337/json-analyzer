@@ -8,10 +8,11 @@ import {
   TokenType,
   TRAILER_MAGIC,
   TRAILER_LENGTH,
-} from "./format";
-import type { BinaryWriter } from "../parser/streamParser";
+} from "./format.js";
+import type { BinaryWriter } from "../parser/streamParser.js";
 
 const DEFAULT_BUFFER_SIZE = 16 * 1024;
+const TOKEN_BUFFER_SIZE = 64 * 1024;
 
 type OffsetEntry = {
   kind: OffsetKind;
@@ -135,6 +136,9 @@ export class BinaryTokenWriter implements BinaryWriter {
   private tokenLength = 0;
   private finalized = false;
 
+  private currentBuffer: Buffer = Buffer.alloc(TOKEN_BUFFER_SIZE);
+  private cursor = 0;
+
   constructor(
     private tokenStream: Writable,
     private metadataStream: Writable
@@ -142,53 +146,66 @@ export class BinaryTokenWriter implements BinaryWriter {
 
   writeStartObject(): void {
     this.recordOffset(OffsetKind.Object);
-    this.pushToken(Buffer.from([TokenType.StartObject]));
+    this.ensureSpace(1);
+    this.currentBuffer.writeUInt8(TokenType.StartObject, this.cursor);
+    this.cursor += 1;
   }
 
   writeEndObject(): void {
-    this.pushToken(Buffer.from([TokenType.EndObject]));
+    this.ensureSpace(1);
+    this.currentBuffer.writeUInt8(TokenType.EndObject, this.cursor);
+    this.cursor += 1;
   }
 
   writeStartArray(): void {
     this.recordOffset(OffsetKind.Array);
-    this.pushToken(Buffer.from([TokenType.StartArray]));
+    this.ensureSpace(1);
+    this.currentBuffer.writeUInt8(TokenType.StartArray, this.cursor);
+    this.cursor += 1;
   }
 
   writeEndArray(): void {
-    this.pushToken(Buffer.from([TokenType.EndArray]));
+    this.ensureSpace(1);
+    this.currentBuffer.writeUInt8(TokenType.EndArray, this.cursor);
+    this.cursor += 1;
   }
 
   writeKey(key: string): void {
     const index = this.registerString(key);
-    const buffer = Buffer.alloc(1 + 4);
-    buffer.writeUInt8(TokenType.Key, 0);
-    buffer.writeUInt32LE(index, 1);
-    this.pushToken(buffer);
+    this.ensureSpace(5);
+    this.currentBuffer.writeUInt8(TokenType.Key, this.cursor);
+    this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
+    this.cursor += 5;
   }
 
   writeString(value: string): void {
     const index = this.registerString(value);
-    const buffer = Buffer.alloc(1 + 4);
-    buffer.writeUInt8(TokenType.String, 0);
-    buffer.writeUInt32LE(index, 1);
-    this.pushToken(buffer);
+    this.ensureSpace(5);
+    this.currentBuffer.writeUInt8(TokenType.String, this.cursor);
+    this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
+    this.cursor += 5;
   }
 
   writeNumber(value: number | string): void {
-    const bytes = Buffer.from(String(value), "utf8");
-    const buffer = Buffer.alloc(1 + 4 + bytes.length);
-    buffer.writeUInt8(TokenType.Number, 0);
-    buffer.writeUInt32LE(bytes.length, 1);
-    bytes.copy(buffer, 5);
-    this.pushToken(buffer);
+    const str = String(value);
+    const len = Buffer.byteLength(str);
+    this.ensureSpace(1 + 4 + len);
+    this.currentBuffer.writeUInt8(TokenType.Number, this.cursor);
+    this.currentBuffer.writeUInt32LE(len, this.cursor + 1);
+    this.currentBuffer.write(str, this.cursor + 5, len, "utf8");
+    this.cursor += 1 + 4 + len;
   }
 
   writeBoolean(value: boolean): void {
-    this.pushToken(Buffer.from([value ? TokenType.True : TokenType.False]));
+    this.ensureSpace(1);
+    this.currentBuffer.writeUInt8(value ? TokenType.True : TokenType.False, this.cursor);
+    this.cursor += 1;
   }
 
   writeNull(): void {
-    this.pushToken(Buffer.from([TokenType.Null]));
+    this.ensureSpace(1);
+    this.currentBuffer.writeUInt8(TokenType.Null, this.cursor);
+    this.cursor += 1;
   }
 
   async finalize(): Promise<void> {
@@ -196,6 +213,11 @@ export class BinaryTokenWriter implements BinaryWriter {
       return;
     }
     this.finalized = true;
+
+    if (this.cursor > 0) {
+      this.tokens.push(this.currentBuffer.subarray(0, this.cursor));
+      this.tokenLength += this.cursor;
+    }
 
     const header = Buffer.concat([
       FORMAT_MAGIC,
@@ -251,11 +273,19 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   private recordOffset(kind: OffsetKind): void {
-    this.offsets.push({ kind, offset: BigInt(this.tokenLength) });
+    this.offsets.push({ kind, offset: BigInt(this.tokenLength + this.cursor) });
   }
 
-  private pushToken(buffer: Buffer): void {
-    this.tokens.push(buffer);
-    this.tokenLength += buffer.length;
+  private ensureSpace(size: number): void {
+    if (this.cursor + size > this.currentBuffer.length) {
+      if (this.cursor > 0) {
+        this.tokens.push(this.currentBuffer.subarray(0, this.cursor));
+        this.tokenLength += this.cursor;
+      }
+      const newSize = Math.max(TOKEN_BUFFER_SIZE, size);
+      this.currentBuffer = Buffer.alloc(newSize);
+      this.cursor = 0;
+    }
   }
+
 }

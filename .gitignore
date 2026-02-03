@@ -1,2 +1,4 @@
 node_modules/
 dist/
+benchmarks/data/
+benchmarks/output/

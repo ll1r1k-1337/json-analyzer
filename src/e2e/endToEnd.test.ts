@@ -4,9 +4,9 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { BinaryTokenWriter } from "../binary/writer";
-import { FORMAT_MAGIC, TokenType, TRAILER_LENGTH, TRAILER_MAGIC } from "../binary/format";
-import { parseJsonStream } from "../parser/streamParser";
+import { BinaryTokenWriter } from "../binary/writer.js";
+import { FORMAT_MAGIC, TokenType, TRAILER_LENGTH, TRAILER_MAGIC } from "../binary/format.js";
+import { parseJsonStream } from "../parser/streamParser.js";
 
 describe("end-to-end binary output", () => {
   it("creates a binary file with expected format markers", async () => {
