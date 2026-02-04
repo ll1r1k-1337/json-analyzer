@@ -105,7 +105,27 @@ const run = async (): Promise<void> => {
     metadataStream.end();
     await Promise.all([once(tokenStream, "finish"), once(metadataStream, "finish")]);
 
+    const stats = writer.getStats();
     console.log("Success: output written.");
+    console.log("Analysis Report:");
+    console.log("  Tokens:");
+    console.log(`    Objects:  ${stats.tokens.objects}`);
+    console.log(`    Arrays:   ${stats.tokens.arrays}`);
+    console.log(`    Keys:     ${stats.tokens.keys}`);
+    console.log(`    Strings:  ${stats.tokens.strings}`);
+    console.log(`    Numbers:  ${stats.tokens.numbers}`);
+    console.log(`    Booleans: ${stats.tokens.booleans}`);
+    console.log(`    Nulls:    ${stats.tokens.nulls}`);
+    console.log("  String Deduplication:");
+    console.log(`    Unique Strings: ${stats.strings.uniqueCount}`);
+    console.log(`    Total Strings:  ${stats.strings.totalCount}`);
+    console.log(`    Unique Bytes:   ${stats.strings.uniqueBytes}`);
+    console.log(`    Total Bytes:    ${stats.strings.totalBytes}`);
+    if (stats.strings.totalBytes > 0) {
+      const saved = stats.strings.totalBytes - stats.strings.uniqueBytes;
+      const ratio = (saved / stats.strings.totalBytes) * 100;
+      console.log(`    Saved:          ${saved} bytes (${ratio.toFixed(2)}%)`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);

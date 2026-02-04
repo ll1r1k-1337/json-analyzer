@@ -103,16 +103,14 @@ describe("BinaryTokenWriter", () => {
     });
 
     const { stringTable, tokenStream } = parseSections(meta, token);
-    expect(parseStringTable(stringTable)).toEqual(["a", "b", "n"]);
+    expect(parseStringTable(stringTable)).toEqual(["a", "b", "n", "42"]);
 
-    const numberBytes = Buffer.from("42", "utf8");
     const expectedTokenStream = Buffer.concat([
       Buffer.from([TokenType.StartObject]),
       Buffer.from([TokenType.Key, 0x00, 0x00, 0x00, 0x00]),
       Buffer.from([TokenType.String, 0x01, 0x00, 0x00, 0x00]),
       Buffer.from([TokenType.Key, 0x02, 0x00, 0x00, 0x00]),
-      Buffer.from([TokenType.Number, numberBytes.length, 0x00, 0x00, 0x00]),
-      numberBytes,
+      Buffer.from([TokenType.NumberRef, 0x03, 0x00, 0x00, 0x00]),
       Buffer.from([TokenType.EndObject]),
     ]);
 
