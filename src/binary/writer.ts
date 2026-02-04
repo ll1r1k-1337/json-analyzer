@@ -256,12 +256,57 @@ export class BinaryTokenWriter implements BinaryWriter {
 
   writeNumber(value: number | string): void {
     this.stats.tokens.numbers += 1;
-    const str = String(value);
-    const index = this.registerString(str);
-    this.ensureSpace(5);
-    this.currentBuffer.writeUInt8(TokenType.NumberRef, this.cursor);
-    this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
-    this.cursor += 5;
+    const num = Number(value);
+
+    if (Number.isInteger(num)) {
+      if (num >= 0 && num <= 255) {
+        this.ensureSpace(2);
+        this.currentBuffer.writeUInt8(TokenType.Uint8, this.cursor);
+        this.currentBuffer.writeUInt8(num, this.cursor + 1);
+        this.cursor += 2;
+        return;
+      }
+      if (num >= -128 && num <= 127) {
+        this.ensureSpace(2);
+        this.currentBuffer.writeUInt8(TokenType.Int8, this.cursor);
+        this.currentBuffer.writeInt8(num, this.cursor + 1);
+        this.cursor += 2;
+        return;
+      }
+      if (num >= 0 && num <= 65535) {
+        this.ensureSpace(3);
+        this.currentBuffer.writeUInt8(TokenType.Uint16, this.cursor);
+        this.currentBuffer.writeUInt16LE(num, this.cursor + 1);
+        this.cursor += 3;
+        return;
+      }
+      if (num >= -32768 && num <= 32767) {
+        this.ensureSpace(3);
+        this.currentBuffer.writeUInt8(TokenType.Int16, this.cursor);
+        this.currentBuffer.writeInt16LE(num, this.cursor + 1);
+        this.cursor += 3;
+        return;
+      }
+      if (num >= 0 && num <= 4294967295) {
+        this.ensureSpace(5);
+        this.currentBuffer.writeUInt8(TokenType.Uint32, this.cursor);
+        this.currentBuffer.writeUInt32LE(num, this.cursor + 1);
+        this.cursor += 5;
+        return;
+      }
+      if (num >= -2147483648 && num <= 2147483647) {
+        this.ensureSpace(5);
+        this.currentBuffer.writeUInt8(TokenType.Int32, this.cursor);
+        this.currentBuffer.writeInt32LE(num, this.cursor + 1);
+        this.cursor += 5;
+        return;
+      }
+    }
+
+    this.ensureSpace(9);
+    this.currentBuffer.writeUInt8(TokenType.Float64, this.cursor);
+    this.currentBuffer.writeDoubleLE(num, this.cursor + 1);
+    this.cursor += 9;
   }
 
   writeBoolean(value: boolean): void {
