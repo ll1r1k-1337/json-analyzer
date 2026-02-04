@@ -303,10 +303,11 @@ export class BinaryTokenWriter implements BinaryWriter {
       }
     }
 
-    this.ensureSpace(9);
-    this.currentBuffer.writeUInt8(TokenType.Float64, this.cursor);
-    this.currentBuffer.writeDoubleLE(num, this.cursor + 1);
-    this.cursor += 9;
+    const index = this.registerString(String(num));
+    this.ensureSpace(5);
+    this.currentBuffer.writeUInt8(TokenType.NumberRef, this.cursor);
+    this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
+    this.cursor += 5;
   }
 
   writeBoolean(value: boolean): void {
