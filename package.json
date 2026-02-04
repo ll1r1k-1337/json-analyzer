@@ -7,6 +7,7 @@
     "build": "tsc",
     "example:parse": "node examples/parse-to-binary.mjs",
     "example:read": "node examples/read-binary.mjs",
+    "example:reconstruct": "node examples/reconstruct-object.mjs",
     "benchmark:parse": "node benchmarks/bench-parse.mjs",
     "test": "vitest run",
     "start": "node dist/cli/index.js",
