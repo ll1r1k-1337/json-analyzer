@@ -28,10 +28,18 @@ class BufferReader implements RandomAccessReader {
 }
 
 class FileReader implements RandomAccessReader {
+  private buffer: Buffer;
+  private bufferOffset: number = -1;
+  private bufferSize: number = 0;
+  private isBuffering: boolean = false;
+  private readonly CHUNK_SIZE = 64 * 1024;
+
   private constructor(
     private handle: Awaited<ReturnType<typeof open>>,
     public size: number
-  ) {}
+  ) {
+    this.buffer = Buffer.allocUnsafe(this.CHUNK_SIZE);
+  }
 
   static async create(path: string): Promise<FileReader> {
     const handle = await open(path, "r");
@@ -40,13 +48,57 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
-    const buffer = Buffer.alloc(length);
-    const { bytesRead } = await this.handle.read(buffer, 0, length, offset);
-    return bytesRead === length ? buffer : buffer.subarray(0, bytesRead);
+    // Check if request is within buffer
+    if (
+      !this.isBuffering &&
+      this.bufferOffset !== -1 &&
+      offset >= this.bufferOffset &&
+      offset + length <= this.bufferOffset + this.bufferSize
+    ) {
+      const start = offset - this.bufferOffset;
+      const result = Buffer.allocUnsafe(length);
+      this.buffer.copy(result, 0, start, start + length);
+      return result;
+    }
+
+    // Cache miss or buffer unstable
+    // If request is larger than chunk size or buffer is busy, read directly
+    if (length > this.CHUNK_SIZE || this.isBuffering) {
+      const buffer = Buffer.alloc(length);
+      const { bytesRead } = await this.handle.read(buffer, 0, length, offset);
+      return bytesRead === length ? buffer : buffer.subarray(0, bytesRead);
+    }
+
+    // Read into buffer starting at requested offset
+    this.isBuffering = true;
+    try {
+      const { bytesRead } = await this.handle.read(
+        this.buffer,
+        0,
+        this.CHUNK_SIZE,
+        offset
+      );
+      this.bufferOffset = offset;
+      this.bufferSize = bytesRead;
+
+      // If we couldn't read enough data (EOF)
+      if (bytesRead < length) {
+        const result = Buffer.allocUnsafe(bytesRead);
+        this.buffer.copy(result, 0, 0, bytesRead);
+        return result;
+      }
+
+      const result = Buffer.allocUnsafe(length);
+      this.buffer.copy(result, 0, 0, length);
+      return result;
+    } finally {
+      this.isBuffering = false;
+    }
   }
 
   async close(): Promise<void> {
     await this.handle.close();
+    this.buffer = Buffer.alloc(0);
   }
 }
 
