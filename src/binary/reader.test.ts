@@ -66,7 +66,12 @@ describe("BinaryTokenReader", () => {
 
     const longStringKeyIndex = tokens.findIndex(t => t.type === TokenType.Key && t.value === "longString");
     expect(longStringKeyIndex).toBeGreaterThan(-1);
-    expect(tokens[longStringKeyIndex + 1].value).toBe("a".repeat(1000));
+    const longStringToken = tokens[longStringKeyIndex + 1];
+    if (longStringToken.type === TokenType.String) {
+        expect(longStringToken.value).toBe("a".repeat(1000));
+    } else {
+        throw new Error("Expected String token");
+    }
   });
 
   it("handles concurrent reads safely", async () => {
