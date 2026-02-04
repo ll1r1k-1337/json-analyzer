@@ -5,15 +5,15 @@ import pkg from "stream-json";
 const { parser } = pkg;
 
 export interface BinaryWriter {
-  writeStartObject(): void;
-  writeEndObject(): void;
-  writeStartArray(): void;
-  writeEndArray(): void;
-  writeKey(key: string): void;
-  writeString(value: string): void;
-  writeNumber(value: number | string): void;
-  writeBoolean(value: boolean): void;
-  writeNull(): void;
+  writeStartObject(): void | Promise<void>;
+  writeEndObject(): void | Promise<void>;
+  writeStartArray(): void | Promise<void>;
+  writeEndArray(): void | Promise<void>;
+  writeKey(key: string): void | Promise<void>;
+  writeString(value: string): void | Promise<void>;
+  writeNumber(value: number | string): void | Promise<void>;
+  writeBoolean(value: boolean): void | Promise<void>;
+  writeNull(): void | Promise<void>;
 }
 
 type JsonToken = {
@@ -21,40 +21,40 @@ type JsonToken = {
   value?: unknown;
 };
 
-const writeToken = (writer: BinaryWriter, token: JsonToken): void => {
+const writeToken = async (writer: BinaryWriter, token: JsonToken): Promise<void> => {
   switch (token.name) {
     case "startObject":
-      writer.writeStartObject();
+      await writer.writeStartObject();
       return;
     case "endObject":
-      writer.writeEndObject();
+      await writer.writeEndObject();
       return;
     case "startArray":
-      writer.writeStartArray();
+      await writer.writeStartArray();
       return;
     case "endArray":
-      writer.writeEndArray();
+      await writer.writeEndArray();
       return;
     case "keyValue":
-      writer.writeKey(String(token.value ?? ""));
+      await writer.writeKey(String(token.value ?? ""));
       return;
     case "stringValue":
-      writer.writeString(String(token.value ?? ""));
+      await writer.writeString(String(token.value ?? ""));
       return;
     case "numberValue":
       if (token.value === undefined) {
         throw new Error("Number token missing value");
       }
-      writer.writeNumber(token.value as number | string);
+      await writer.writeNumber(token.value as number | string);
       return;
     case "trueValue":
-      writer.writeBoolean(true);
+      await writer.writeBoolean(true);
       return;
     case "falseValue":
-      writer.writeBoolean(false);
+      await writer.writeBoolean(false);
       return;
     case "nullValue":
-      writer.writeNull();
+      await writer.writeNull();
       return;
     default:
       return;
@@ -64,9 +64,9 @@ const writeToken = (writer: BinaryWriter, token: JsonToken): void => {
 const createWriterSink = (writer: BinaryWriter): Writable =>
   new Writable({
     objectMode: true,
-    write(chunk: JsonToken, _encoding, callback) {
+    async write(chunk: JsonToken, _encoding, callback) {
       try {
-        writeToken(writer, chunk);
+        await writeToken(writer, chunk);
         callback();
       } catch (error) {
         callback(error as Error);
