@@ -53,6 +53,7 @@ export enum TokenType {
   True = 0x08,
   False = 0x09,
   Null = 0x0a,
+  NumberRef = 0x0b,
 }
 
 export enum OffsetKind {

@@ -276,6 +276,18 @@ export class BinaryTokenReader {
         const value = numberBytes.toString("utf8");
         return { token: { type, value }, byteLength: 5 + byteLength };
       }
+      case TokenType.NumberRef: {
+        const payload = await this.readBytes(absoluteOffset + 1n, 4);
+        if (payload.length < 4) {
+          throw new Error("Unable to read string table index");
+        }
+        const index = payload.readUInt32LE(0);
+        const value = this.stringTable[index];
+        if (value === undefined) {
+          throw new Error(`String table index out of bounds: ${index}`);
+        }
+        return { token: { type: TokenType.Number, value }, byteLength: 5 };
+      }
       default:
         throw new Error(`Unknown token type: ${type}`);
     }

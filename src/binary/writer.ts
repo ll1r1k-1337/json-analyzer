@@ -11,6 +11,24 @@ import {
 } from "./format.js";
 import type { BinaryWriter } from "../parser/streamParser.js";
 
+export type WriterStats = {
+  tokens: {
+    objects: number;
+    arrays: number;
+    keys: number;
+    strings: number;
+    numbers: number;
+    booleans: number;
+    nulls: number;
+  };
+  strings: {
+    uniqueCount: number;
+    totalCount: number;
+    uniqueBytes: number;
+    totalBytes: number;
+  };
+};
+
 const DEFAULT_BUFFER_SIZE = 16 * 1024;
 const TOKEN_BUFFER_SIZE = 64 * 1024;
 
@@ -160,6 +178,24 @@ export class BinaryTokenWriter implements BinaryWriter {
   private tokenLength = 0;
   private finalized = false;
 
+  private stats: WriterStats = {
+    tokens: {
+      objects: 0,
+      arrays: 0,
+      keys: 0,
+      strings: 0,
+      numbers: 0,
+      booleans: 0,
+      nulls: 0,
+    },
+    strings: {
+      uniqueCount: 0,
+      totalCount: 0,
+      uniqueBytes: 0,
+      totalBytes: 0,
+    },
+  };
+
   private currentBuffer: Buffer = Buffer.alloc(TOKEN_BUFFER_SIZE);
   private cursor = 0;
 
@@ -168,7 +204,12 @@ export class BinaryTokenWriter implements BinaryWriter {
     private metadataStream: Writable
   ) {}
 
+  getStats(): WriterStats {
+    return this.stats;
+  }
+
   writeStartObject(): void {
+    this.stats.tokens.objects += 1;
     this.recordOffset(OffsetKind.Object);
     this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.StartObject, this.cursor);
@@ -182,6 +223,7 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   writeStartArray(): void {
+    this.stats.tokens.arrays += 1;
     this.recordOffset(OffsetKind.Array);
     this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.StartArray, this.cursor);
@@ -195,6 +237,7 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   writeKey(key: string): void {
+    this.stats.tokens.keys += 1;
     const index = this.registerString(key);
     this.ensureSpace(5);
     this.currentBuffer.writeUInt8(TokenType.Key, this.cursor);
@@ -203,6 +246,7 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   writeString(value: string): void {
+    this.stats.tokens.strings += 1;
     const index = this.registerString(value);
     this.ensureSpace(5);
     this.currentBuffer.writeUInt8(TokenType.String, this.cursor);
@@ -211,22 +255,24 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   writeNumber(value: number | string): void {
+    this.stats.tokens.numbers += 1;
     const str = String(value);
-    const len = Buffer.byteLength(str);
-    this.ensureSpace(1 + 4 + len);
-    this.currentBuffer.writeUInt8(TokenType.Number, this.cursor);
-    this.currentBuffer.writeUInt32LE(len, this.cursor + 1);
-    this.currentBuffer.write(str, this.cursor + 5, len, "utf8");
-    this.cursor += 1 + 4 + len;
+    const index = this.registerString(str);
+    this.ensureSpace(5);
+    this.currentBuffer.writeUInt8(TokenType.NumberRef, this.cursor);
+    this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
+    this.cursor += 5;
   }
 
   writeBoolean(value: boolean): void {
+    this.stats.tokens.booleans += 1;
     this.ensureSpace(1);
     this.currentBuffer.writeUInt8(value ? TokenType.True : TokenType.False, this.cursor);
     this.cursor += 1;
   }
 
   writeNull(): void {
+    this.stats.tokens.nulls += 1;
     this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.Null, this.cursor);
     this.cursor += 1;
@@ -286,10 +332,18 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   private registerString(value: string): number {
+    this.stats.strings.totalCount += 1;
+    const byteLength = Buffer.byteLength(value, "utf8");
+    this.stats.strings.totalBytes += byteLength;
+
     const existing = this.stringIndex.get(value);
     if (existing !== undefined) {
       return existing;
     }
+
+    this.stats.strings.uniqueCount += 1;
+    this.stats.strings.uniqueBytes += byteLength;
+
     const index = this.strings.length;
     this.strings.push(value);
     this.stringIndex.set(value, index);
