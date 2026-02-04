@@ -10,6 +10,7 @@ import {
   TRAILER_LENGTH,
 } from "./format.js";
 import type { BinaryWriter } from "../parser/streamParser.js";
+import { CRC32 } from "./crc32.js";
 
 export type WriterStats = {
   tokens: {
@@ -95,29 +96,6 @@ const encodeOffsets = (offsets: OffsetEntry[]): Buffer => {
   return buffer;
 };
 
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i += 1) {
-    let value = i;
-    for (let j = 0; j < 8; j += 1) {
-      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    }
-    table[i] = value >>> 0;
-  }
-  return table;
-})();
-
-const crc32 = (buffers: Buffer[]): number => {
-  let crc = 0xffffffff;
-  for (const buffer of buffers) {
-    const len = buffer.length;
-    for (let i = 0; i < len; i += 1) {
-      crc = CRC_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-};
-
 class BufferedStreamWriter {
   private buffer: Buffer;
   private offset = 0;
@@ -171,12 +149,14 @@ class BufferedStreamWriter {
 }
 
 export class BinaryTokenWriter implements BinaryWriter {
-  private readonly tokens: Buffer[] = [];
   private readonly offsets: OffsetEntry[] = [];
   private readonly stringIndex = new Map<string, number>();
   private readonly strings: string[] = [];
   private tokenLength = 0;
   private finalized = false;
+
+  private tokenWriter: BufferedStreamWriter;
+  private crcTokens: CRC32;
 
   private stats: WriterStats = {
     tokens: {
@@ -202,100 +182,103 @@ export class BinaryTokenWriter implements BinaryWriter {
   constructor(
     private tokenStream: Writable,
     private metadataStream: Writable
-  ) {}
+  ) {
+    this.tokenWriter = new BufferedStreamWriter(tokenStream);
+    this.crcTokens = new CRC32();
+  }
 
   getStats(): WriterStats {
     return this.stats;
   }
 
-  writeStartObject(): void {
+  async writeStartObject(): Promise<void> {
     this.stats.tokens.objects += 1;
     this.recordOffset(OffsetKind.Object);
-    this.ensureSpace(1);
+    await this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.StartObject, this.cursor);
     this.cursor += 1;
   }
 
-  writeEndObject(): void {
-    this.ensureSpace(1);
+  async writeEndObject(): Promise<void> {
+    await this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.EndObject, this.cursor);
     this.cursor += 1;
   }
 
-  writeStartArray(): void {
+  async writeStartArray(): Promise<void> {
     this.stats.tokens.arrays += 1;
     this.recordOffset(OffsetKind.Array);
-    this.ensureSpace(1);
+    await this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.StartArray, this.cursor);
     this.cursor += 1;
   }
 
-  writeEndArray(): void {
-    this.ensureSpace(1);
+  async writeEndArray(): Promise<void> {
+    await this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.EndArray, this.cursor);
     this.cursor += 1;
   }
 
-  writeKey(key: string): void {
+  async writeKey(key: string): Promise<void> {
     this.stats.tokens.keys += 1;
     const index = this.registerString(key);
-    this.ensureSpace(5);
+    await this.ensureSpace(5);
     this.currentBuffer.writeUInt8(TokenType.Key, this.cursor);
     this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
     this.cursor += 5;
   }
 
-  writeString(value: string): void {
+  async writeString(value: string): Promise<void> {
     this.stats.tokens.strings += 1;
     const index = this.registerString(value);
-    this.ensureSpace(5);
+    await this.ensureSpace(5);
     this.currentBuffer.writeUInt8(TokenType.String, this.cursor);
     this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
     this.cursor += 5;
   }
 
-  writeNumber(value: number | string): void {
+  async writeNumber(value: number | string): Promise<void> {
     this.stats.tokens.numbers += 1;
     const num = Number(value);
 
     if (Number.isInteger(num)) {
       if (num >= 0 && num <= 255) {
-        this.ensureSpace(2);
+        await this.ensureSpace(2);
         this.currentBuffer.writeUInt8(TokenType.Uint8, this.cursor);
         this.currentBuffer.writeUInt8(num, this.cursor + 1);
         this.cursor += 2;
         return;
       }
       if (num >= -128 && num <= 127) {
-        this.ensureSpace(2);
+        await this.ensureSpace(2);
         this.currentBuffer.writeUInt8(TokenType.Int8, this.cursor);
         this.currentBuffer.writeInt8(num, this.cursor + 1);
         this.cursor += 2;
         return;
       }
       if (num >= 0 && num <= 65535) {
-        this.ensureSpace(3);
+        await this.ensureSpace(3);
         this.currentBuffer.writeUInt8(TokenType.Uint16, this.cursor);
         this.currentBuffer.writeUInt16LE(num, this.cursor + 1);
         this.cursor += 3;
         return;
       }
       if (num >= -32768 && num <= 32767) {
-        this.ensureSpace(3);
+        await this.ensureSpace(3);
         this.currentBuffer.writeUInt8(TokenType.Int16, this.cursor);
         this.currentBuffer.writeInt16LE(num, this.cursor + 1);
         this.cursor += 3;
         return;
       }
       if (num >= 0 && num <= 4294967295) {
-        this.ensureSpace(5);
+        await this.ensureSpace(5);
         this.currentBuffer.writeUInt8(TokenType.Uint32, this.cursor);
         this.currentBuffer.writeUInt32LE(num, this.cursor + 1);
         this.cursor += 5;
         return;
       }
       if (num >= -2147483648 && num <= 2147483647) {
-        this.ensureSpace(5);
+        await this.ensureSpace(5);
         this.currentBuffer.writeUInt8(TokenType.Int32, this.cursor);
         this.currentBuffer.writeInt32LE(num, this.cursor + 1);
         this.cursor += 5;
@@ -304,22 +287,22 @@ export class BinaryTokenWriter implements BinaryWriter {
     }
 
     const index = this.registerString(String(num));
-    this.ensureSpace(5);
+    await this.ensureSpace(5);
     this.currentBuffer.writeUInt8(TokenType.NumberRef, this.cursor);
     this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
     this.cursor += 5;
   }
 
-  writeBoolean(value: boolean): void {
+  async writeBoolean(value: boolean): Promise<void> {
     this.stats.tokens.booleans += 1;
-    this.ensureSpace(1);
+    await this.ensureSpace(1);
     this.currentBuffer.writeUInt8(value ? TokenType.True : TokenType.False, this.cursor);
     this.cursor += 1;
   }
 
-  writeNull(): void {
+  async writeNull(): Promise<void> {
     this.stats.tokens.nulls += 1;
-    this.ensureSpace(1);
+    await this.ensureSpace(1);
     this.currentBuffer.writeUInt8(TokenType.Null, this.cursor);
     this.cursor += 1;
   }
@@ -331,9 +314,14 @@ export class BinaryTokenWriter implements BinaryWriter {
     this.finalized = true;
 
     if (this.cursor > 0) {
-      this.tokens.push(this.currentBuffer.subarray(0, this.cursor));
+      const chunk = this.currentBuffer.subarray(0, this.cursor);
+      this.crcTokens.update(chunk);
+      await this.tokenWriter.write(chunk);
       this.tokenLength += this.cursor;
     }
+
+    // Ensure all tokens are written to the stream
+    await this.tokenWriter.end();
 
     const header = Buffer.concat([
       FORMAT_MAGIC,
@@ -341,16 +329,31 @@ export class BinaryTokenWriter implements BinaryWriter {
       writeUInt16LE(0),
     ]);
     const stringTable = encodeStringTable(this.strings);
-    const tokenStream = Buffer.concat(this.tokens);
+    // const tokenStream = Buffer.concat(this.tokens); // Removed
     const index = encodeOffsets(this.offsets);
 
     const stringTableOffset = BigInt(HEADER_LENGTH);
     const tokenStreamOffset = 0n;
-    const tokenStreamLength = BigInt(tokenStream.length);
+    const tokenStreamLength = BigInt(this.tokenLength);
     const indexOffset = BigInt(HEADER_LENGTH + stringTable.length);
     const indexLength = BigInt(index.length);
 
-    const checksum = crc32([header, stringTable, tokenStream, index]);
+    // Checksum calculation: Header || StringTable || Tokens || Index
+    // Part 1: Header || StringTable (calculated with 0xFFFFFFFF initial state)
+    const statePrefix = CRC32.calculate(Buffer.concat([header, stringTable]), 0xffffffff);
+
+    // Part 2: Tokens (calculated with 0 initial state, available in this.crcTokens)
+    const stateTokens = this.crcTokens.getRawState();
+
+    // Combine Part 1 and Part 2
+    const combinedState = CRC32.combine(statePrefix, stateTokens, tokenStreamLength);
+
+    // Part 3: Index (update combined state with index)
+    const finalState = CRC32.calculate(index, combinedState);
+
+    // Finalize CRC (XOR out)
+    const checksum = (finalState ^ 0xffffffff) >>> 0;
+
     const trailer = Buffer.concat([
       TRAILER_MAGIC,
       writeUInt64LE(stringTableOffset),
@@ -364,10 +367,6 @@ export class BinaryTokenWriter implements BinaryWriter {
     if (trailer.length !== TRAILER_LENGTH) {
       throw new Error(`Unexpected trailer length: ${trailer.length}`);
     }
-
-    const tokenWriter = new BufferedStreamWriter(this.tokenStream);
-    await tokenWriter.write(tokenStream);
-    await tokenWriter.end();
 
     const metadataWriter = new BufferedStreamWriter(this.metadataStream);
     await metadataWriter.write(header);
@@ -400,10 +399,12 @@ export class BinaryTokenWriter implements BinaryWriter {
     this.offsets.push({ kind, offset: BigInt(this.tokenLength + this.cursor) });
   }
 
-  private ensureSpace(size: number): void {
+  private async ensureSpace(size: number): Promise<void> {
     if (this.cursor + size > this.currentBuffer.length) {
       if (this.cursor > 0) {
-        this.tokens.push(this.currentBuffer.subarray(0, this.cursor));
+        const chunk = this.currentBuffer.subarray(0, this.cursor);
+        this.crcTokens.update(chunk);
+        await this.tokenWriter.write(chunk);
         this.tokenLength += this.cursor;
       }
       const newSize = Math.max(TOKEN_BUFFER_SIZE, size);

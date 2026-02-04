@@ -82,9 +82,9 @@ const parseSections = (metadata: Buffer, token: Buffer) => {
 
 describe("BinaryTokenWriter", () => {
   it("writes the header magic and version", async () => {
-    const { meta } = await collectWriterOutput((writer) => {
-      writer.writeStartObject();
-      writer.writeEndObject();
+    const { meta } = await collectWriterOutput(async (writer) => {
+      await writer.writeStartObject();
+      await writer.writeEndObject();
     });
 
     expect(meta.subarray(0, 4).equals(FORMAT_MAGIC)).toBe(true);
@@ -93,13 +93,13 @@ describe("BinaryTokenWriter", () => {
   });
 
   it("encodes tokens and string table entries", async () => {
-    const { meta, token } = await collectWriterOutput((writer) => {
-      writer.writeStartObject();
-      writer.writeKey("a");
-      writer.writeString("b");
-      writer.writeKey("n");
-      writer.writeNumber(42);
-      writer.writeEndObject();
+    const { meta, token } = await collectWriterOutput(async (writer) => {
+      await writer.writeStartObject();
+      await writer.writeKey("a");
+      await writer.writeString("b");
+      await writer.writeKey("n");
+      await writer.writeNumber(42);
+      await writer.writeEndObject();
     });
 
     const { stringTable, tokenStream } = parseSections(meta, token);
@@ -118,16 +118,16 @@ describe("BinaryTokenWriter", () => {
   });
 
   it("encodes various number types", async () => {
-    const { meta, token } = await collectWriterOutput((writer) => {
-      writer.writeStartArray();
-      writer.writeNumber(100); // Uint8
-      writer.writeNumber(-50); // Int8
-      writer.writeNumber(1000); // Uint16
-      writer.writeNumber(-1000); // Int16
-      writer.writeNumber(100000); // Uint32
-      writer.writeNumber(-100000); // Int32
-      writer.writeNumber(1.5); // Float64
-      writer.writeEndArray();
+    const { meta, token } = await collectWriterOutput(async (writer) => {
+      await writer.writeStartArray();
+      await writer.writeNumber(100); // Uint8
+      await writer.writeNumber(-50); // Int8
+      await writer.writeNumber(1000); // Uint16
+      await writer.writeNumber(-1000); // Int16
+      await writer.writeNumber(100000); // Uint32
+      await writer.writeNumber(-100000); // Int32
+      await writer.writeNumber(1.5); // Float64
+      await writer.writeEndArray();
     });
 
     const { stringTable, tokenStream } = parseSections(meta, token);
@@ -168,11 +168,11 @@ describe("BinaryTokenWriter", () => {
 
   it("records offset index entries and finalizes once", async () => {
     const { meta, token } = await collectWriterOutput(
-      (writer) => {
-        writer.writeStartArray();
-        writer.writeStartObject();
-        writer.writeEndObject();
-        writer.writeEndArray();
+      async (writer) => {
+        await writer.writeStartArray();
+        await writer.writeStartObject();
+        await writer.writeEndObject();
+        await writer.writeEndArray();
       },
       true
     );
