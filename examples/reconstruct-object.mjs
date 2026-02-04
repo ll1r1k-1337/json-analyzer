@@ -122,7 +122,22 @@ async function main() {
     }
 
     console.log("\nReconstructed Object:");
-    console.log(JSON.stringify(root, null, 2));
+    try {
+      console.log(JSON.stringify(root, null, 2));
+    } catch (error) {
+      if (error instanceof RangeError) {
+        console.error("Error: Object is too large to display as a string.");
+        if (Array.isArray(root)) {
+          console.log(`Array with ${root.length} items.`);
+        } else if (typeof root === 'object' && root !== null) {
+          console.log(`Object with keys: ${Object.keys(root).slice(0, 10).join(', ')}${Object.keys(root).length > 10 ? '...' : ''}`);
+        } else {
+          console.log(root);
+        }
+      } else {
+        throw error;
+      }
+    }
 
   } finally {
     if (reader) await reader.close();
