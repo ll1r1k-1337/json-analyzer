@@ -54,6 +54,13 @@ export enum TokenType {
   False = 0x09,
   Null = 0x0a,
   NumberRef = 0x0b,
+  Int8 = 0x0c,
+  Uint8 = 0x0d,
+  Int16 = 0x0e,
+  Uint16 = 0x0f,
+  Int32 = 0x10,
+  Uint32 = 0x11,
+  Float64 = 0x12,
 }
 
 export enum OffsetKind {

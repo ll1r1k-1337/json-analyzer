@@ -103,18 +103,67 @@ describe("BinaryTokenWriter", () => {
     });
 
     const { stringTable, tokenStream } = parseSections(meta, token);
-    expect(parseStringTable(stringTable)).toEqual(["a", "b", "n", "42"]);
+    expect(parseStringTable(stringTable)).toEqual(["a", "b", "n"]);
 
     const expectedTokenStream = Buffer.concat([
       Buffer.from([TokenType.StartObject]),
       Buffer.from([TokenType.Key, 0x00, 0x00, 0x00, 0x00]),
       Buffer.from([TokenType.String, 0x01, 0x00, 0x00, 0x00]),
       Buffer.from([TokenType.Key, 0x02, 0x00, 0x00, 0x00]),
-      Buffer.from([TokenType.NumberRef, 0x03, 0x00, 0x00, 0x00]),
+      Buffer.from([TokenType.Uint8, 42]),
       Buffer.from([TokenType.EndObject]),
     ]);
 
     expect(tokenStream.equals(expectedTokenStream)).toBe(true);
+  });
+
+  it("encodes various number types", async () => {
+    const { meta, token } = await collectWriterOutput((writer) => {
+      writer.writeStartArray();
+      writer.writeNumber(100); // Uint8
+      writer.writeNumber(-50); // Int8
+      writer.writeNumber(1000); // Uint16
+      writer.writeNumber(-1000); // Int16
+      writer.writeNumber(100000); // Uint32
+      writer.writeNumber(-100000); // Int32
+      writer.writeNumber(1.5); // Float64
+      writer.writeEndArray();
+    });
+
+    const { stringTable, tokenStream } = parseSections(meta, token);
+    expect(parseStringTable(stringTable)).toEqual([]); // No strings
+
+    // Verify token types
+    let offset = 0;
+    expect(tokenStream[offset++]).toBe(TokenType.StartArray);
+
+    expect(tokenStream[offset++]).toBe(TokenType.Uint8);
+    expect(tokenStream[offset++]).toBe(100);
+
+    expect(tokenStream[offset++]).toBe(TokenType.Int8);
+    expect(tokenStream.readInt8(offset++)).toBe(-50);
+
+    expect(tokenStream[offset++]).toBe(TokenType.Uint16);
+    expect(tokenStream.readUInt16LE(offset)).toBe(1000);
+    offset += 2;
+
+    expect(tokenStream[offset++]).toBe(TokenType.Int16);
+    expect(tokenStream.readInt16LE(offset)).toBe(-1000);
+    offset += 2;
+
+    expect(tokenStream[offset++]).toBe(TokenType.Uint32);
+    expect(tokenStream.readUInt32LE(offset)).toBe(100000);
+    offset += 4;
+
+    expect(tokenStream[offset++]).toBe(TokenType.Int32);
+    expect(tokenStream.readInt32LE(offset)).toBe(-100000);
+    offset += 4;
+
+    expect(tokenStream[offset++]).toBe(TokenType.Float64);
+    expect(tokenStream.readDoubleLE(offset)).toBe(1.5);
+    offset += 8;
+
+    expect(tokenStream[offset++]).toBe(TokenType.EndArray);
   });
 
   it("records offset index entries and finalizes once", async () => {
