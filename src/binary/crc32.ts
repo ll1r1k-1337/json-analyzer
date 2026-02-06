@@ -1,3 +1,5 @@
+import { crc32 } from 'node:zlib';
+
 export class CRC32 {
   private static TABLE: Uint32Array;
 
@@ -19,12 +21,11 @@ export class CRC32 {
   }
 
   update(buffer: Buffer): void {
-    let crc = this.state;
-    const len = buffer.length;
-    for (let i = 0; i < len; i += 1) {
-      crc = CRC32.TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
-    }
-    this.state = crc >>> 0;
+    // Use native node:zlib crc32.
+    // The native implementation uses the standard CRC32 algorithm (init=0xFFFFFFFF, xorout=0xFFFFFFFF).
+    // Our implementation uses init=0, xorout=0.
+    // To adapt, we invert the initial state passed to zlib, and invert the result from zlib.
+    this.state = (~crc32(buffer, (~this.state) >>> 0)) >>> 0;
   }
 
   getRawState(): number {
@@ -32,12 +33,7 @@ export class CRC32 {
   }
 
   static calculate(buffer: Buffer, initial: number = 0): number {
-    let crc = initial;
-    const len = buffer.length;
-    for (let i = 0; i < len; i += 1) {
-      crc = CRC32.TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
-    }
-    return crc >>> 0;
+    return (~crc32(buffer, (~initial) >>> 0)) >>> 0;
   }
 
   // Combine two states.
