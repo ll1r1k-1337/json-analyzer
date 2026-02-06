@@ -30,8 +30,8 @@ export type WriterStats = {
   };
 };
 
-const DEFAULT_BUFFER_SIZE = 16 * 1024;
-const TOKEN_BUFFER_SIZE = 64 * 1024;
+const DEFAULT_BUFFER_SIZE = 64 * 1024;
+const TOKEN_BUFFER_SIZE = 512 * 1024;
 
 type OffsetEntry = {
   kind: OffsetKind;
@@ -100,7 +100,7 @@ class BufferedStreamWriter {
     private stream: Writable,
     private size = DEFAULT_BUFFER_SIZE
   ) {
-    this.buffer = Buffer.alloc(this.size);
+    this.buffer = Buffer.allocUnsafe(this.size);
   }
 
   private async flushBuffer(): Promise<void> {
@@ -114,24 +114,26 @@ class BufferedStreamWriter {
     }
   }
 
-  async write(buffer: Buffer): Promise<void> {
+  write(buffer: Buffer): void | Promise<void> {
     let remaining = buffer;
     while (remaining.length > 0) {
       const available = this.size - this.offset;
       if (remaining.length >= this.size) {
-        await this.flushBuffer();
-        if (!this.stream.write(remaining)) {
-          await once(this.stream, "drain");
-        }
-        return;
+        // If buffer is full, we must flush. This requires async.
+        const promise = this.flushBuffer().then(async () => {
+          if (!this.stream.write(remaining)) {
+            await once(this.stream, "drain");
+          }
+        });
+        return promise;
       }
       if (remaining.length > available) {
         const slice = remaining.subarray(0, available);
         slice.copy(this.buffer, this.offset);
         this.offset += slice.length;
         remaining = remaining.subarray(available);
-        await this.flushBuffer();
-        continue;
+        const promise = this.flushBuffer().then(() => this.write(remaining));
+        return promise;
       }
       remaining.copy(this.buffer, this.offset);
       this.offset += remaining.length;
@@ -172,7 +174,7 @@ export class BinaryTokenWriter implements BinaryWriter {
     },
   };
 
-  private currentBuffer: Buffer = Buffer.alloc(TOKEN_BUFFER_SIZE);
+  private currentBuffer: Buffer = Buffer.allocUnsafe(TOKEN_BUFFER_SIZE);
   private cursor = 0;
 
   constructor(
@@ -187,94 +189,174 @@ export class BinaryTokenWriter implements BinaryWriter {
     return this.stats;
   }
 
-  async writeStartObject(): Promise<void> {
+  writeStartObject(): void | Promise<void> {
     this.stats.tokens.objects += 1;
     this.recordOffset(OffsetKind.Object);
-    await this.ensureSpace(1);
+    const result = this.ensureSpace(1);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.StartObject, this.cursor);
+        this.cursor += 1;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.StartObject, this.cursor);
     this.cursor += 1;
   }
 
-  async writeEndObject(): Promise<void> {
-    await this.ensureSpace(1);
+  writeEndObject(): void | Promise<void> {
+    const result = this.ensureSpace(1);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.EndObject, this.cursor);
+        this.cursor += 1;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.EndObject, this.cursor);
     this.cursor += 1;
   }
 
-  async writeStartArray(): Promise<void> {
+  writeStartArray(): void | Promise<void> {
     this.stats.tokens.arrays += 1;
     this.recordOffset(OffsetKind.Array);
-    await this.ensureSpace(1);
+    const result = this.ensureSpace(1);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.StartArray, this.cursor);
+        this.cursor += 1;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.StartArray, this.cursor);
     this.cursor += 1;
   }
 
-  async writeEndArray(): Promise<void> {
-    await this.ensureSpace(1);
+  writeEndArray(): void | Promise<void> {
+    const result = this.ensureSpace(1);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.EndArray, this.cursor);
+        this.cursor += 1;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.EndArray, this.cursor);
     this.cursor += 1;
   }
 
-  async writeKey(key: string): Promise<void> {
+  writeKey(key: string): void | Promise<void> {
     this.stats.tokens.keys += 1;
     const index = this.registerString(key);
-    await this.ensureSpace(5);
+    const result = this.ensureSpace(5);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.Key, this.cursor);
+        this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
+        this.cursor += 5;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.Key, this.cursor);
     this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
     this.cursor += 5;
   }
 
-  async writeString(value: string): Promise<void> {
+  writeString(value: string): void | Promise<void> {
     this.stats.tokens.strings += 1;
     const index = this.registerString(value);
-    await this.ensureSpace(5);
+    const result = this.ensureSpace(5);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.String, this.cursor);
+        this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
+        this.cursor += 5;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.String, this.cursor);
     this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
     this.cursor += 5;
   }
 
-  async writeNumber(value: number | string): Promise<void> {
+  writeNumber(value: number | string): void | Promise<void> {
     this.stats.tokens.numbers += 1;
     const num = Number(value);
 
     if (Number.isInteger(num)) {
       if (num >= 0 && num <= 255) {
-        await this.ensureSpace(2);
+        const result = this.ensureSpace(2);
+        if (result) {
+          return result.then(() => {
+            this.currentBuffer.writeUInt8(TokenType.Uint8, this.cursor);
+            this.currentBuffer.writeUInt8(num, this.cursor + 1);
+            this.cursor += 2;
+          });
+        }
         this.currentBuffer.writeUInt8(TokenType.Uint8, this.cursor);
         this.currentBuffer.writeUInt8(num, this.cursor + 1);
         this.cursor += 2;
         return;
       }
       if (num >= -128 && num <= 127) {
-        await this.ensureSpace(2);
+        const result = this.ensureSpace(2);
+        if (result) {
+          return result.then(() => {
+            this.currentBuffer.writeUInt8(TokenType.Int8, this.cursor);
+            this.currentBuffer.writeInt8(num, this.cursor + 1);
+            this.cursor += 2;
+          });
+        }
         this.currentBuffer.writeUInt8(TokenType.Int8, this.cursor);
         this.currentBuffer.writeInt8(num, this.cursor + 1);
         this.cursor += 2;
         return;
       }
       if (num >= 0 && num <= 65535) {
-        await this.ensureSpace(3);
+        const result = this.ensureSpace(3);
+        if (result) {
+          return result.then(() => {
+            this.currentBuffer.writeUInt8(TokenType.Uint16, this.cursor);
+            this.currentBuffer.writeUInt16LE(num, this.cursor + 1);
+            this.cursor += 3;
+          });
+        }
         this.currentBuffer.writeUInt8(TokenType.Uint16, this.cursor);
         this.currentBuffer.writeUInt16LE(num, this.cursor + 1);
         this.cursor += 3;
         return;
       }
       if (num >= -32768 && num <= 32767) {
-        await this.ensureSpace(3);
+        const result = this.ensureSpace(3);
+        if (result) {
+          return result.then(() => {
+            this.currentBuffer.writeUInt8(TokenType.Int16, this.cursor);
+            this.currentBuffer.writeInt16LE(num, this.cursor + 1);
+            this.cursor += 3;
+          });
+        }
         this.currentBuffer.writeUInt8(TokenType.Int16, this.cursor);
         this.currentBuffer.writeInt16LE(num, this.cursor + 1);
         this.cursor += 3;
         return;
       }
       if (num >= 0 && num <= 4294967295) {
-        await this.ensureSpace(5);
+        const result = this.ensureSpace(5);
+        if (result) {
+          return result.then(() => {
+            this.currentBuffer.writeUInt8(TokenType.Uint32, this.cursor);
+            this.currentBuffer.writeUInt32LE(num, this.cursor + 1);
+            this.cursor += 5;
+          });
+        }
         this.currentBuffer.writeUInt8(TokenType.Uint32, this.cursor);
         this.currentBuffer.writeUInt32LE(num, this.cursor + 1);
         this.cursor += 5;
         return;
       }
       if (num >= -2147483648 && num <= 2147483647) {
-        await this.ensureSpace(5);
+        const result = this.ensureSpace(5);
+        if (result) {
+          return result.then(() => {
+            this.currentBuffer.writeUInt8(TokenType.Int32, this.cursor);
+            this.currentBuffer.writeInt32LE(num, this.cursor + 1);
+            this.cursor += 5;
+          });
+        }
         this.currentBuffer.writeUInt8(TokenType.Int32, this.cursor);
         this.currentBuffer.writeInt32LE(num, this.cursor + 1);
         this.cursor += 5;
@@ -283,22 +365,41 @@ export class BinaryTokenWriter implements BinaryWriter {
     }
 
     const index = this.registerString(String(num));
-    await this.ensureSpace(5);
+    const result = this.ensureSpace(5);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.NumberRef, this.cursor);
+        this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
+        this.cursor += 5;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.NumberRef, this.cursor);
     this.currentBuffer.writeUInt32LE(index, this.cursor + 1);
     this.cursor += 5;
   }
 
-  async writeBoolean(value: boolean): Promise<void> {
+  writeBoolean(value: boolean): void | Promise<void> {
     this.stats.tokens.booleans += 1;
-    await this.ensureSpace(1);
+    const result = this.ensureSpace(1);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(value ? TokenType.True : TokenType.False, this.cursor);
+        this.cursor += 1;
+      });
+    }
     this.currentBuffer.writeUInt8(value ? TokenType.True : TokenType.False, this.cursor);
     this.cursor += 1;
   }
 
-  async writeNull(): Promise<void> {
+  writeNull(): void | Promise<void> {
     this.stats.tokens.nulls += 1;
-    await this.ensureSpace(1);
+    const result = this.ensureSpace(1);
+    if (result) {
+      return result.then(() => {
+        this.currentBuffer.writeUInt8(TokenType.Null, this.cursor);
+        this.cursor += 1;
+      });
+    }
     this.currentBuffer.writeUInt8(TokenType.Null, this.cursor);
     this.cursor += 1;
   }
@@ -374,14 +475,15 @@ export class BinaryTokenWriter implements BinaryWriter {
 
   private registerString(value: string): number {
     this.stats.strings.totalCount += 1;
-    const byteLength = Buffer.byteLength(value, "utf8");
-    this.stats.strings.totalBytes += byteLength;
 
     const existing = this.stringIndex.get(value);
     if (existing !== undefined) {
+      this.stats.strings.totalBytes += value.length;
       return existing;
     }
 
+    const byteLength = Buffer.byteLength(value, "utf8");
+    this.stats.strings.totalBytes += byteLength;
     this.stats.strings.uniqueCount += 1;
     this.stats.strings.uniqueBytes += byteLength;
 
@@ -395,16 +497,24 @@ export class BinaryTokenWriter implements BinaryWriter {
     this.offsets.push({ kind, offset: BigInt(this.tokenLength + this.cursor) });
   }
 
-  private async ensureSpace(size: number): Promise<void> {
+  private ensureSpace(size: number): void | Promise<void> {
     if (this.cursor + size > this.currentBuffer.length) {
       if (this.cursor > 0) {
         const chunk = this.currentBuffer.subarray(0, this.cursor);
         this.crcTokens.update(chunk);
-        await this.tokenWriter.write(chunk);
+        const result = this.tokenWriter.write(chunk);
         this.tokenLength += this.cursor;
+
+        if (result && typeof result.then === 'function') {
+           return result.then(() => {
+             const newSize = Math.max(TOKEN_BUFFER_SIZE, size);
+             this.currentBuffer = Buffer.allocUnsafe(newSize);
+             this.cursor = 0;
+           });
+        }
       }
       const newSize = Math.max(TOKEN_BUFFER_SIZE, size);
-      this.currentBuffer = Buffer.alloc(newSize);
+      this.currentBuffer = Buffer.allocUnsafe(newSize);
       this.cursor = 0;
     }
   }
