@@ -105,6 +105,17 @@ async function main() {
         case TokenType.Null:
            value = null;
            break;
+
+        case TokenType.Uint8Array:
+        case TokenType.Int8Array:
+        case TokenType.Uint16Array:
+        case TokenType.Int16Array:
+        case TokenType.Uint32Array:
+        case TokenType.Int32Array:
+        case TokenType.Float32Array:
+        case TokenType.Float64Array:
+           value = token.value;
+           break;
       }
 
       if (!handled) {

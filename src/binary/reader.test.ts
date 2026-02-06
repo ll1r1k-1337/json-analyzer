@@ -40,9 +40,10 @@ describe("BinaryTokenReader", () => {
 
     await parseJsonStream(readStream, writer);
     await writer.finalize();
+    tokenStream.end();
 
-    await new Promise<void>(resolve => tokenStream.end(() => resolve()));
-    await new Promise<void>(resolve => metadataStream.end(() => resolve()));
+    await new Promise<void>(resolve => tokenStream.on('finish', resolve));
+    await new Promise<void>(resolve => metadataStream.on('finish', resolve));
 
     const reader = await BinaryTokenReader.fromFiles(outputMetaPath, outputBinPath);
     const trailer = reader.getTrailer();
