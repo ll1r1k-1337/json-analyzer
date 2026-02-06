@@ -56,9 +56,10 @@ class FileReader implements RandomAccessReader {
       offset + length <= this.bufferOffset + this.bufferSize
     ) {
       const start = offset - this.bufferOffset;
-      const result = Buffer.allocUnsafe(length);
-      this.buffer.copy(result, 0, start, start + length);
-      return result;
+      // Optimization: return subarray to avoid allocation and copy.
+      // Safe because the buffer is only refilled when not serving a request,
+      // and BinaryTokenReader consumes data immediately.
+      return this.buffer.subarray(start, start + length);
     }
 
     // Cache miss or buffer unstable
