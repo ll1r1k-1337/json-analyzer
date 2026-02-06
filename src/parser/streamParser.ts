@@ -21,41 +21,31 @@ type JsonToken = {
   value?: unknown;
 };
 
-const writeToken = async (writer: BinaryWriter, token: JsonToken): Promise<void> => {
+const writeToken = (writer: BinaryWriter, token: JsonToken): void | Promise<void> => {
   switch (token.name) {
     case "startObject":
-      await writer.writeStartObject();
-      return;
+      return writer.writeStartObject();
     case "endObject":
-      await writer.writeEndObject();
-      return;
+      return writer.writeEndObject();
     case "startArray":
-      await writer.writeStartArray();
-      return;
+      return writer.writeStartArray();
     case "endArray":
-      await writer.writeEndArray();
-      return;
+      return writer.writeEndArray();
     case "keyValue":
-      await writer.writeKey(String(token.value ?? ""));
-      return;
+      return writer.writeKey(String(token.value ?? ""));
     case "stringValue":
-      await writer.writeString(String(token.value ?? ""));
-      return;
+      return writer.writeString(String(token.value ?? ""));
     case "numberValue":
       if (token.value === undefined) {
         throw new Error("Number token missing value");
       }
-      await writer.writeNumber(token.value as number | string);
-      return;
+      return writer.writeNumber(token.value as number | string);
     case "trueValue":
-      await writer.writeBoolean(true);
-      return;
+      return writer.writeBoolean(true);
     case "falseValue":
-      await writer.writeBoolean(false);
-      return;
+      return writer.writeBoolean(false);
     case "nullValue":
-      await writer.writeNull();
-      return;
+      return writer.writeNull();
     default:
       return;
   }
@@ -64,10 +54,14 @@ const writeToken = async (writer: BinaryWriter, token: JsonToken): Promise<void>
 const createWriterSink = (writer: BinaryWriter): Writable =>
   new Writable({
     objectMode: true,
-    async write(chunk: JsonToken, _encoding, callback) {
+    write(chunk: JsonToken, _encoding, callback) {
       try {
-        await writeToken(writer, chunk);
-        callback();
+        const result = writeToken(writer, chunk);
+        if (result && typeof result.then === 'function') {
+          result.then(() => callback(), (err) => callback(err));
+        } else {
+          callback();
+        }
       } catch (error) {
         callback(error as Error);
       }
