@@ -56,12 +56,8 @@ const writeUInt64LE = (value: bigint): Buffer => {
   return buffer;
 };
 
-const encodeStringTable = (strings: string[]): Buffer => {
-  let size = 4;
-  for (const value of strings) {
-    size += 4 + Buffer.byteLength(value, "utf8");
-  }
-
+const encodeStringTable = (strings: string[], totalBytes: number): Buffer => {
+  const size = 4 + strings.length * 4 + totalBytes;
   const buffer = Buffer.alloc(size);
   let offset = 0;
 
@@ -69,10 +65,10 @@ const encodeStringTable = (strings: string[]): Buffer => {
   offset += 4;
 
   for (const value of strings) {
-    const byteLength = Buffer.byteLength(value, "utf8");
-    buffer.writeUInt32LE(byteLength, offset);
+    const lengthOffset = offset;
     offset += 4;
-    buffer.write(value, offset, byteLength, "utf8");
+    const byteLength = buffer.write(value, offset, "utf8");
+    buffer.writeUInt32LE(byteLength, lengthOffset);
     offset += byteLength;
   }
 
@@ -328,7 +324,7 @@ export class BinaryTokenWriter implements BinaryWriter {
       writeUInt16LE(FORMAT_VERSION),
       writeUInt16LE(0),
     ]);
-    const stringTable = encodeStringTable(this.strings);
+    const stringTable = encodeStringTable(this.strings, this.stats.strings.uniqueBytes);
     // const tokenStream = Buffer.concat(this.tokens); // Removed
     const index = encodeOffsets(this.offsets);
 
