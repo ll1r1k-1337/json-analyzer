@@ -3,12 +3,9 @@ import { once } from "node:events";
 import { describe, expect, it } from "vitest";
 import { BinaryTokenWriter } from "./writer.js";
 import {
-  FORMAT_MAGIC,
   FORMAT_VERSION,
   OffsetKind,
   TokenType,
-  TRAILER_LENGTH,
-  TRAILER_MAGIC,
 } from "./format.js";
 
 const collectWriterOutput = async (
@@ -35,61 +32,18 @@ const collectWriterOutput = async (
   return { meta: Buffer.concat(metaChunks), token: Buffer.concat(tokenChunks) };
 };
 
-const parseStringTable = (buffer: Buffer): string[] => {
-  const count = buffer.readUInt32LE(0);
-  const values: string[] = [];
-  let offset = 4;
-  for (let i = 0; i < count; i += 1) {
-    const length = buffer.readUInt32LE(offset);
-    offset += 4;
-    values.push(buffer.toString("utf8", offset, offset + length));
-    offset += length;
-  }
-  return values;
-};
-
-const parseIndex = (buffer: Buffer): Array<{ kind: number; offset: bigint }> => {
-  const count = buffer.readUInt32LE(0);
-  const entries: Array<{ kind: number; offset: bigint }> = [];
-  let offset = 4;
-  for (let i = 0; i < count; i += 1) {
-    const kind = buffer.readUInt8(offset);
-    const tokenOffset = buffer.readBigUInt64LE(offset + 1);
-    entries.push({ kind, offset: tokenOffset });
-    offset += 9;
-  }
-  return entries;
-};
-
-const parseSections = (metadata: Buffer, token: Buffer) => {
-  const trailerStart = metadata.length - TRAILER_LENGTH;
-  const trailer = metadata.subarray(trailerStart);
-  const magic = trailer.subarray(0, 4);
-
-  const stringTableOffset = Number(trailer.readBigUInt64LE(4));
-  const tokenStreamOffset = Number(trailer.readBigUInt64LE(12));
-  const tokenStreamLength = Number(trailer.readBigUInt64LE(20));
-  const indexOffset = Number(trailer.readBigUInt64LE(28));
-  const indexLength = Number(trailer.readBigUInt64LE(36));
-
-  return {
-    trailerMagic: magic,
-    stringTable: metadata.subarray(stringTableOffset, indexOffset),
-    tokenStream: token.subarray(tokenStreamOffset, tokenStreamOffset + tokenStreamLength),
-    index: metadata.subarray(indexOffset, indexOffset + indexLength),
-  };
-};
-
 describe("BinaryTokenWriter", () => {
-  it("writes the header magic and version", async () => {
+  it("writes valid JSON metadata", async () => {
     const { meta } = await collectWriterOutput(async (writer) => {
       await writer.writeStartObject();
       await writer.writeEndObject();
     });
 
-    expect(meta.subarray(0, 4).equals(FORMAT_MAGIC)).toBe(true);
-    expect(meta.readUInt16LE(4)).toBe(FORMAT_VERSION);
-    expect(meta.readUInt16LE(6)).toBe(0);
+    const json = JSON.parse(meta.toString('utf8'));
+    expect(json.magic).toBe("JSAN");
+    expect(json.version).toBe(FORMAT_VERSION);
+    expect(Array.isArray(json.stringTable)).toBe(true);
+    expect(Array.isArray(json.index)).toBe(true);
   });
 
   it("encodes tokens and string table entries", async () => {
@@ -102,8 +56,8 @@ describe("BinaryTokenWriter", () => {
       await writer.writeEndObject();
     });
 
-    const { stringTable, tokenStream } = parseSections(meta, token);
-    expect(parseStringTable(stringTable)).toEqual(["a", "b", "n"]);
+    const json = JSON.parse(meta.toString('utf8'));
+    expect(json.stringTable).toEqual(["a", "b", "n"]);
 
     const expectedTokenStream = Buffer.concat([
       Buffer.from([TokenType.StartObject]),
@@ -114,7 +68,7 @@ describe("BinaryTokenWriter", () => {
       Buffer.from([TokenType.EndObject]),
     ]);
 
-    expect(tokenStream.equals(expectedTokenStream)).toBe(true);
+    expect(token.equals(expectedTokenStream)).toBe(true);
   });
 
   it("encodes various number types", async () => {
@@ -130,11 +84,12 @@ describe("BinaryTokenWriter", () => {
       await writer.writeEndArray();
     });
 
-    const { stringTable, tokenStream } = parseSections(meta, token);
-    expect(parseStringTable(stringTable)).toEqual(["1.5"]);
+    const json = JSON.parse(meta.toString('utf8'));
+    expect(json.stringTable).toEqual(["1.5"]);
 
     // Verify token types
     let offset = 0;
+    const tokenStream = token;
     expect(tokenStream[offset++]).toBe(TokenType.StartArray);
 
     expect(tokenStream[offset++]).toBe(TokenType.Uint8);
@@ -167,7 +122,7 @@ describe("BinaryTokenWriter", () => {
   });
 
   it("records offset index entries and finalizes once", async () => {
-    const { meta, token } = await collectWriterOutput(
+    const { meta } = await collectWriterOutput(
       async (writer) => {
         await writer.writeStartArray();
         await writer.writeStartObject();
@@ -177,13 +132,10 @@ describe("BinaryTokenWriter", () => {
       true
     );
 
-    const { index, trailerMagic } = parseSections(meta, token);
-    expect(trailerMagic.equals(TRAILER_MAGIC)).toBe(true);
-
-    const entries = parseIndex(index);
-    expect(entries).toEqual([
-      { kind: OffsetKind.Array, offset: 0n },
-      { kind: OffsetKind.Object, offset: 1n },
+    const json = JSON.parse(meta.toString('utf8'));
+    expect(json.index).toEqual([
+      { kind: OffsetKind.Array, offset: "0" },
+      { kind: OffsetKind.Object, offset: "1" },
     ]);
   });
 });

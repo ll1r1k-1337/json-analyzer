@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { BinaryTokenWriter } from "../binary/writer.js";
-import { FORMAT_MAGIC, TokenType, TRAILER_LENGTH, TRAILER_MAGIC } from "../binary/format.js";
+import { TokenType } from "../binary/format.js";
 import { parseJsonStream } from "../parser/streamParser.js";
 
 describe("end-to-end binary output", () => {
@@ -26,23 +26,19 @@ describe("end-to-end binary output", () => {
     await parseJsonStream(readStream, writer);
     await writer.finalize();
     tokenStream.end();
-    metadataStream.end();
+    // metadataStream is ended by writer.finalize()
     await Promise.all([once(tokenStream, "finish"), once(metadataStream, "finish")]);
 
     const metadata = await readFile(outputMetaPath);
     const tokenStreamOutput = await readFile(outputBinPath);
-    expect(metadata.subarray(0, 4).equals(FORMAT_MAGIC)).toBe(true);
 
-    const trailer = metadata.subarray(metadata.length - TRAILER_LENGTH);
-    expect(trailer.subarray(0, 4).equals(TRAILER_MAGIC)).toBe(true);
+    // Check JSON metadata
+    const json = JSON.parse(metadata.toString('utf8'));
+    expect(json.magic).toBe("JSAN");
+    expect(Array.isArray(json.stringTable)).toBe(true);
 
-    const tokenStreamOffset = Number(trailer.readBigUInt64LE(12));
-    const tokenStreamLength = Number(trailer.readBigUInt64LE(20));
-    const tokenStreamSlice = tokenStreamOutput.subarray(
-      tokenStreamOffset,
-      tokenStreamOffset + tokenStreamLength
-    );
-    expect(tokenStreamSlice.includes(TokenType.StartObject)).toBe(true);
-    expect(tokenStreamSlice.includes(TokenType.EndObject)).toBe(true);
+    // Check tokens
+    expect(tokenStreamOutput.includes(TokenType.StartObject)).toBe(true);
+    expect(tokenStreamOutput.includes(TokenType.EndObject)).toBe(true);
   });
 });
