@@ -64,7 +64,7 @@ class FileReader implements RandomAccessReader {
     // Cache miss or buffer unstable
     // If request is larger than chunk size or buffer is busy, read directly
     if (length > this.CHUNK_SIZE || this.isBuffering) {
-      const buffer = Buffer.alloc(length);
+      const buffer = Buffer.allocUnsafe(length);
       const { bytesRead } = await this.handle.read(buffer, 0, length, offset);
       return bytesRead === length ? buffer : buffer.subarray(0, bytesRead);
     }
