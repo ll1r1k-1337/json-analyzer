@@ -30,6 +30,11 @@ export type WriterStats = {
   };
 };
 
+export type BinaryWriterOptions = {
+  maxUniqueStrings?: number;
+  maxStringTableBytes?: number;
+};
+
 const DEFAULT_BUFFER_SIZE = 16 * 1024;
 const TOKEN_BUFFER_SIZE = 64 * 1024;
 
@@ -177,7 +182,8 @@ export class BinaryTokenWriter implements BinaryWriter {
 
   constructor(
     private tokenStream: Writable,
-    private metadataStream: Writable
+    private metadataStream: Writable,
+    private options: BinaryWriterOptions = {}
   ) {
     this.tokenWriter = new BufferedStreamWriter(tokenStream);
     this.crcTokens = new CRC32();
@@ -380,6 +386,21 @@ export class BinaryTokenWriter implements BinaryWriter {
     const existing = this.stringIndex.get(value);
     if (existing !== undefined) {
       return existing;
+    }
+
+    const maxUniqueStrings = this.options.maxUniqueStrings ?? 500_000;
+    if (this.strings.length >= maxUniqueStrings) {
+      throw new Error(
+        `String table limit reached: ${maxUniqueStrings} unique strings`
+      );
+    }
+
+    const maxStringTableBytes =
+      this.options.maxStringTableBytes ?? 100 * 1024 * 1024;
+    if (this.stats.strings.uniqueBytes + byteLength > maxStringTableBytes) {
+      throw new Error(
+        `String table byte limit reached: ${maxStringTableBytes} bytes`
+      );
     }
 
     this.stats.strings.uniqueCount += 1;
