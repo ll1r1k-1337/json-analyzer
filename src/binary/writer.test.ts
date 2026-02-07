@@ -85,7 +85,7 @@ describe("BinaryTokenWriter", () => {
     });
 
     const json = JSON.parse(meta.toString('utf8'));
-    expect(json.stringTable).toEqual(["1.5"]);
+    expect(json.stringTable).toEqual([]);
 
     // Verify token types
     let offset = 0;
@@ -114,9 +114,9 @@ describe("BinaryTokenWriter", () => {
     expect(tokenStream.readInt32LE(offset)).toBe(-100000);
     offset += 4;
 
-    expect(tokenStream[offset++]).toBe(TokenType.NumberRef);
-    expect(tokenStream.readUInt32LE(offset)).toBe(0);
-    offset += 4;
+    expect(tokenStream[offset++]).toBe(TokenType.Float64);
+    expect(tokenStream.readDoubleLE(offset)).toBe(1.5);
+    offset += 8;
 
     expect(tokenStream[offset++]).toBe(TokenType.EndArray);
   });
