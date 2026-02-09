@@ -553,6 +553,21 @@ export class BinaryTokenWriter implements BinaryWriter {
       }
     }
 
+    if (Number.isFinite(num)) {
+      const result = this.ensureSpace(9);
+      if (result) {
+        return result.then(() => {
+          this.currentBuffer.writeUInt8(TokenType.Float64, this.cursor);
+          this.currentBuffer.writeDoubleLE(num, this.cursor + 1);
+          this.cursor += 9;
+        });
+      }
+      this.currentBuffer.writeUInt8(TokenType.Float64, this.cursor);
+      this.currentBuffer.writeDoubleLE(num, this.cursor + 1);
+      this.cursor += 9;
+      return;
+    }
+
     const index = this.registerString(String(num));
     const result = this.ensureSpace(5);
     if (result) {
