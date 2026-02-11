@@ -31,6 +31,27 @@ export type WriterStats = {
   };
 };
 
+export interface BinaryWriterOptions {
+  /**
+   * Pre-computed analysis report to optimize binary format.
+   */
+  analysis?: AnalysisReport;
+
+  /**
+   * Maximum number of unique strings allowed in the string table.
+   * If exceeded, a security error is thrown.
+   * Default: Infinity
+   */
+  maxUniqueStrings?: number;
+
+  /**
+   * Maximum total size (in bytes) of the string table.
+   * If exceeded, a security error is thrown.
+   * Default: Infinity
+   */
+  maxStringTableBytes?: number;
+}
+
 const DEFAULT_BUFFER_SIZE = 64 * 1024;
 const TOKEN_BUFFER_SIZE = 512 * 1024;
 
@@ -136,14 +157,29 @@ export class BinaryTokenWriter implements BinaryWriter {
 
   private currentBuffer: Buffer = Buffer.allocUnsafe(TOKEN_BUFFER_SIZE);
   private cursor = 0;
+  private options: BinaryWriterOptions = {};
 
   constructor(
     tokenStream: Writable,
     private metadataStream: Writable,
-    private analysis?: AnalysisReport
+    optionsOrAnalysis?: AnalysisReport | BinaryWriterOptions
   ) {
     this.tokenWriter = new BufferedStreamWriter(tokenStream);
     this.crcTokens = new CRC32();
+
+    let analysis: AnalysisReport | undefined;
+
+    if (optionsOrAnalysis) {
+      if ('arrays' in optionsOrAnalysis && 'strings' in optionsOrAnalysis) {
+        // It's an AnalysisReport
+        analysis = optionsOrAnalysis as AnalysisReport;
+        this.options = { analysis };
+      } else {
+        // It's BinaryWriterOptions
+        this.options = optionsOrAnalysis as BinaryWriterOptions;
+        analysis = this.options.analysis;
+      }
+    }
 
     if (analysis) {
       this.strings = [...analysis.strings];
@@ -283,9 +319,9 @@ export class BinaryTokenWriter implements BinaryWriter {
     this.beforeValue();
 
     // Check analysis
-    if (this.analysis) {
+    if (this.options.analysis) {
         const pathStr = this.path.join('/');
-        const type = this.analysis.arrays.get(pathStr);
+        const type = this.options.analysis.arrays.get(pathStr);
         if (type) {
             this.optimizedArrayType = type;
             this.bufferedNumbers = [];
@@ -686,6 +722,18 @@ export class BinaryTokenWriter implements BinaryWriter {
     }
 
     const byteLength = Buffer.byteLength(value, "utf8");
+
+    if (this.options.maxUniqueStrings !== undefined && this.stats.strings.uniqueCount >= this.options.maxUniqueStrings) {
+      throw new Error(`Security limit exceeded: maxUniqueStrings (${this.options.maxUniqueStrings})`);
+    }
+
+    if (
+      this.options.maxStringTableBytes !== undefined &&
+      this.stats.strings.uniqueBytes + byteLength > this.options.maxStringTableBytes
+    ) {
+      throw new Error(`Security limit exceeded: maxStringTableBytes (${this.options.maxStringTableBytes})`);
+    }
+
     this.stats.strings.totalBytes += byteLength;
     this.stats.strings.uniqueCount += 1;
     this.stats.strings.uniqueBytes += byteLength;
