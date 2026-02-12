@@ -9,6 +9,7 @@
     "example:read": "node examples/read-binary.mjs",
     "example:reconstruct": "node examples/reconstruct-object.mjs",
     "benchmark:parse": "node benchmarks/bench-parse.mjs",
+    "benchmark:read": "node benchmarks/bench-read.mjs",
     "test": "vitest run",
     "start": "node dist/cli/index.js",
     "lint": "eslint . --ext .ts"

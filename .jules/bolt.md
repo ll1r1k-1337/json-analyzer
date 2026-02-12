@@ -1,0 +1,3 @@
+## 2024-05-23 - Speculative Reading in BinaryTokenReader
+**Learning:** In asynchronous file I/O (even with buffering), the overhead of Promise resolution and function calls can be significant when processing millions of small items. Reading a small header (e.g., 16 bytes) speculatively to cover the majority of token types in a single `await` call provided a ~40% speedup compared to making multiple sequential small reads.
+**Action:** When designing binary readers for high-throughput stream processing, prioritize fetching sufficient context in a single read operation to parse the most common structures synchronously, falling back to additional reads only for large variable-length data.
