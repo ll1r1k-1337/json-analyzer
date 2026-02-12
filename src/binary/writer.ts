@@ -31,6 +31,12 @@ export type WriterStats = {
   };
 };
 
+export interface BinaryWriterOptions {
+  analysis?: AnalysisReport;
+  maxUniqueStrings?: number;
+  maxStringTableBytes?: number;
+}
+
 const DEFAULT_BUFFER_SIZE = 64 * 1024;
 const TOKEN_BUFFER_SIZE = 512 * 1024;
 
@@ -116,6 +122,10 @@ export class BinaryTokenWriter implements BinaryWriter {
   private optimizedArrayType: TokenType | null = null;
   private bufferedNumbers: number[] = [];
 
+  private analysis?: AnalysisReport;
+  private maxUniqueStrings: number = Infinity;
+  private maxStringTableBytes: number = Infinity;
+
   private stats: WriterStats = {
     tokens: {
       objects: 0,
@@ -140,15 +150,26 @@ export class BinaryTokenWriter implements BinaryWriter {
   constructor(
     tokenStream: Writable,
     private metadataStream: Writable,
-    private analysis?: AnalysisReport
+    options?: BinaryWriterOptions | AnalysisReport
   ) {
     this.tokenWriter = new BufferedStreamWriter(tokenStream);
     this.crcTokens = new CRC32();
 
-    if (analysis) {
-      this.strings = [...analysis.strings];
+    if (options) {
+      if ('strings' in options && Array.isArray(options.strings)) {
+         this.analysis = options as AnalysisReport;
+      } else {
+         const opts = options as BinaryWriterOptions;
+         this.analysis = opts.analysis;
+         if (opts.maxUniqueStrings !== undefined) this.maxUniqueStrings = opts.maxUniqueStrings;
+         if (opts.maxStringTableBytes !== undefined) this.maxStringTableBytes = opts.maxStringTableBytes;
+      }
+    }
+
+    if (this.analysis) {
+      this.strings = [...this.analysis.strings];
       this.strings.forEach((s, i) => this.stringIndex.set(s, i));
-      this.stats.strings = { ...analysis.stringStats };
+      this.stats.strings = { ...this.analysis.stringStats };
     }
   }
 
@@ -686,6 +707,14 @@ export class BinaryTokenWriter implements BinaryWriter {
     }
 
     const byteLength = Buffer.byteLength(value, "utf8");
+
+    if (this.stats.strings.uniqueCount >= this.maxUniqueStrings) {
+        throw new Error("Max unique strings limit reached");
+    }
+    if (this.stats.strings.uniqueBytes + byteLength > this.maxStringTableBytes) {
+        throw new Error("Max string table bytes limit reached");
+    }
+
     this.stats.strings.totalBytes += byteLength;
     this.stats.strings.uniqueCount += 1;
     this.stats.strings.uniqueBytes += byteLength;
