@@ -1,0 +1,4 @@
+## 2024-05-22 - Unchecked Allocation in Binary Reader
+**Vulnerability:** `BinaryTokenReader` blindly trusted `length` fields (for Numbers, TypedArrays, Metadata) from binary files, passing them directly to `Buffer.alloc`. This allowed a malicious file with a huge length value (e.g., 2GB) to crash the process instantly due to a Node.js assertion failure or memory exhaustion.
+**Learning:** When parsing binary formats, never trust length fields. Node.js buffers have hard limits (kMaxMaxLength ~2GB), and attempting to allocate beyond this (or available RAM) can be fatal and uncatchable in some contexts (like C++ assertion failures in `fs.read`).
+**Prevention:** Always enforce a strict `MAX_SAFE_ALLOCATION` limit (e.g., 64MB) on any dynamic allocation based on input data. Validate lengths *before* allocating or reading.
