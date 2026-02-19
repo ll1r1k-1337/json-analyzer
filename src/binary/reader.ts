@@ -142,6 +142,8 @@ export type BinaryTokenResult = {
   byteLength: number;
 };
 
+const MAX_SAFE_ALLOCATION = 64 * 1024 * 1024; // 64MB
+
 const toNumber = (value: bigint, label: string): number => {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`${label} exceeds safe integer range`);
@@ -357,8 +359,17 @@ export class BinaryTokenReader {
         const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
         if (lengthBytes.length < 4) throw new Error("Unable to read number length");
         const byteLength = lengthBytes.readUInt32LE(0);
-        const numberBytes = await this.readBytes(absoluteOffset + 5n, byteLength);
-        if (numberBytes.length < byteLength) throw new Error("Unable to read number bytes");
+        if (byteLength > MAX_SAFE_ALLOCATION) {
+          throw new Error(
+            `Number token length (${byteLength}) exceeds maximum safe allocation (${MAX_SAFE_ALLOCATION})`
+          );
+        }
+        const numberBytes = await this.readBytes(
+          absoluteOffset + 5n,
+          byteLength
+        );
+        if (numberBytes.length < byteLength)
+          throw new Error("Unable to read number bytes");
         const value = numberBytes.toString("utf8");
         return { token: { type, value }, byteLength: 5 + byteLength };
       }
@@ -407,13 +418,20 @@ export class BinaryTokenReader {
       case TokenType.Int32Array:
       case TokenType.Float32Array:
       case TokenType.Float64Array: {
-          const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
-          if (lengthBytes.length < 4) throw new Error("Unable to read typed array length");
-          const byteLength = lengthBytes.readUInt32LE(0);
-          const data = await this.readBytes(absoluteOffset + 5n, byteLength);
-          if (data.length < byteLength) throw new Error("Unable to read typed array data");
+        const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
+        if (lengthBytes.length < 4)
+          throw new Error("Unable to read typed array length");
+        const byteLength = lengthBytes.readUInt32LE(0);
+        if (byteLength > MAX_SAFE_ALLOCATION) {
+          throw new Error(
+            `TypedArray token length (${byteLength}) exceeds maximum safe allocation (${MAX_SAFE_ALLOCATION})`
+          );
+        }
+        const data = await this.readBytes(absoluteOffset + 5n, byteLength);
+        if (data.length < byteLength)
+          throw new Error("Unable to read typed array data");
 
-          return { token: { type, value: data }, byteLength: 5 + byteLength };
+        return { token: { type, value: data }, byteLength: 5 + byteLength };
       }
 
       default:
@@ -472,11 +490,23 @@ export class BinaryTokenReader {
       stringTableLength = indexOffset - stringTableOffset;
     }
 
+    if (stringTableLength > MAX_SAFE_ALLOCATION) {
+      throw new Error(
+        `String table length (${stringTableLength}) exceeds maximum safe allocation (${MAX_SAFE_ALLOCATION})`
+      );
+    }
+
     const stringTableBuffer = await metaReader.read(
       stringTableOffset,
       stringTableLength
     );
     const strings = parseStringTable(stringTableBuffer);
+
+    if (indexLength > MAX_SAFE_ALLOCATION) {
+      throw new Error(
+        `Index length (${indexLength}) exceeds maximum safe allocation (${MAX_SAFE_ALLOCATION})`
+      );
+    }
 
     const indexBuffer = await metaReader.read(indexOffset, indexLength);
     const index = parseIndex(indexBuffer);
