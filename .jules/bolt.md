@@ -1,0 +1,3 @@
+## 2026-02-20 - BinaryTokenWriter Performance Anti-Patterns
+**Learning:** `BinaryTokenWriter` was converting all floating-point numbers to strings (`TokenType.NumberRef`) instead of using native `TokenType.Float64`. This caused significant metadata file bloat (string table entries for every unique float) and CPU overhead for string conversion and lookup. Additionally, it maintained expensive path tracking state (array index, object key) even when analysis was disabled, adding overhead to every token.
+**Action:** Always check if a binary writer supports native types (like `Float64`) before falling back to string references for numbers. Ensure optional features like path tracking are conditionally executed to avoid overhead in the hot path.
