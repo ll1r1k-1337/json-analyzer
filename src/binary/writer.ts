@@ -161,6 +161,8 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   private beforeValue(): void {
+    if (!this.analysis) return;
+
     const container = this.currentContainer();
     if (container.type === 'array') {
       container.index++;
@@ -169,6 +171,8 @@ export class BinaryTokenWriter implements BinaryWriter {
   }
 
   private afterValue(): void {
+    if (!this.analysis) return;
+
     const container = this.currentContainer();
     if (container.type === 'array') {
       this.path.pop();
@@ -419,7 +423,9 @@ export class BinaryTokenWriter implements BinaryWriter {
 
     this.stats.tokens.keys += 1;
     const index = this.registerString(key);
-    this.path.push(key); // Push key
+    if (this.analysis) {
+      this.path.push(key); // Push key
+    }
 
     const result = this.ensureSpace(5);
     if (result) {
@@ -551,6 +557,21 @@ export class BinaryTokenWriter implements BinaryWriter {
         this.cursor += 5;
         return;
       }
+    }
+
+    if (!Number.isInteger(num) && Number.isFinite(num)) {
+      const result = this.ensureSpace(9);
+      if (result) {
+        return result.then(() => {
+          this.currentBuffer.writeUInt8(TokenType.Float64, this.cursor);
+          this.currentBuffer.writeDoubleLE(num, this.cursor + 1);
+          this.cursor += 9;
+        });
+      }
+      this.currentBuffer.writeUInt8(TokenType.Float64, this.cursor);
+      this.currentBuffer.writeDoubleLE(num, this.cursor + 1);
+      this.cursor += 9;
+      return;
     }
 
     const index = this.registerString(String(num));
