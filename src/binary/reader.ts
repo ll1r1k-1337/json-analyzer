@@ -1,4 +1,7 @@
 import { open } from "node:fs/promises";
+
+const MAX_SAFE_ALLOCATION = 64 * 1024 * 1024; // 64MB
+
 import {
   FORMAT_MAGIC,
   FORMAT_VERSION,
@@ -48,6 +51,10 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Allocation exceeds maximum safe limit (${MAX_SAFE_ALLOCATION} bytes)`);
+    }
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
