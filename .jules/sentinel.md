@@ -1,0 +1,4 @@
+## 2024-05-24 - Uncontrolled Memory Allocation in Binary Reader
+**Vulnerability:** The `BinaryTokenReader` (and underlying `FileReader`) attempted to allocate memory based on untrusted length values from the input file without checking against a safe limit. A malicious file could declare a 4GB token length, causing an immediate OOM crash or excessive memory consumption.
+**Learning:** The project uses `Buffer.alloc` directly with user-supplied lengths. Even though `Buffer.alloc` has internal limits, relying on them is unsafe because they are too high (2GB+) for per-token allocations in a multi-tenant or server environment.
+**Prevention:** Always validate length fields read from binary formats against a reasonable application-specific limit (e.g., 64MB) *before* attempting allocation. Added `MAX_SAFE_ALLOCATION` constant to enforce this.
