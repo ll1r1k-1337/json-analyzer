@@ -9,6 +9,8 @@ import {
   TRAILER_MAGIC,
 } from "./format.js";
 
+const MAX_SAFE_ALLOCATION = 64 * 1024 * 1024; // 64MB
+
 type RandomAccessReader = {
   size: number;
   read(offset: number, length: number): Promise<Buffer>;
@@ -357,6 +359,11 @@ export class BinaryTokenReader {
         const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
         if (lengthBytes.length < 4) throw new Error("Unable to read number length");
         const byteLength = lengthBytes.readUInt32LE(0);
+
+        if (byteLength > MAX_SAFE_ALLOCATION) {
+          throw new Error(`Number length ${byteLength} exceeds max safe allocation ${MAX_SAFE_ALLOCATION}`);
+        }
+
         const numberBytes = await this.readBytes(absoluteOffset + 5n, byteLength);
         if (numberBytes.length < byteLength) throw new Error("Unable to read number bytes");
         const value = numberBytes.toString("utf8");
@@ -410,6 +417,11 @@ export class BinaryTokenReader {
           const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
           if (lengthBytes.length < 4) throw new Error("Unable to read typed array length");
           const byteLength = lengthBytes.readUInt32LE(0);
+
+          if (byteLength > MAX_SAFE_ALLOCATION) {
+            throw new Error(`TypedArray length ${byteLength} exceeds max safe allocation ${MAX_SAFE_ALLOCATION}`);
+          }
+
           const data = await this.readBytes(absoluteOffset + 5n, byteLength);
           if (data.length < byteLength) throw new Error("Unable to read typed array data");
 
@@ -456,6 +468,10 @@ export class BinaryTokenReader {
     const indexOffset = toNumber(trailer.indexOffset, "Index offset");
     const indexLength = toNumber(trailer.indexLength, "Index length");
 
+    if (indexLength > MAX_SAFE_ALLOCATION) {
+        throw new Error(`Index length ${indexLength} exceeds max safe allocation ${MAX_SAFE_ALLOCATION}`);
+    }
+
     let source = tokenReader;
     let stringTableLength: number;
 
@@ -470,6 +486,10 @@ export class BinaryTokenReader {
     } else {
       // Split file mode: string table is followed by index in metadata file
       stringTableLength = indexOffset - stringTableOffset;
+    }
+
+    if (stringTableLength > MAX_SAFE_ALLOCATION) {
+        throw new Error(`String table length ${stringTableLength} exceeds max safe allocation ${MAX_SAFE_ALLOCATION}`);
     }
 
     const stringTableBuffer = await metaReader.read(
