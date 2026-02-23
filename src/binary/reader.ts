@@ -9,6 +9,9 @@ import {
   TRAILER_MAGIC,
 } from "./format.js";
 
+// Security limit: 64MB for a single allocation
+const MAX_SAFE_ALLOCATION = 64 * 1024 * 1024;
+
 type RandomAccessReader = {
   size: number;
   read(offset: number, length: number): Promise<Buffer>;
@@ -192,6 +195,9 @@ const parseStringTable = (buffer: Buffer): string[] => {
       throw new Error("Unexpected end of string table");
     }
     const byteLength = buffer.readUInt32LE(offset);
+    if (byteLength > MAX_SAFE_ALLOCATION) {
+      throw new Error("String length exceeds safe allocation limit");
+    }
     offset += 4;
     if (offset + byteLength > buffer.length) {
       throw new Error("Unexpected end of string table data");
@@ -357,6 +363,9 @@ export class BinaryTokenReader {
         const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
         if (lengthBytes.length < 4) throw new Error("Unable to read number length");
         const byteLength = lengthBytes.readUInt32LE(0);
+        if (byteLength > MAX_SAFE_ALLOCATION) {
+          throw new Error("Token length exceeds safe allocation limit");
+        }
         const numberBytes = await this.readBytes(absoluteOffset + 5n, byteLength);
         if (numberBytes.length < byteLength) throw new Error("Unable to read number bytes");
         const value = numberBytes.toString("utf8");
@@ -410,6 +419,9 @@ export class BinaryTokenReader {
           const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
           if (lengthBytes.length < 4) throw new Error("Unable to read typed array length");
           const byteLength = lengthBytes.readUInt32LE(0);
+          if (byteLength > MAX_SAFE_ALLOCATION) {
+            throw new Error("Token length exceeds safe allocation limit");
+          }
           const data = await this.readBytes(absoluteOffset + 5n, byteLength);
           if (data.length < byteLength) throw new Error("Unable to read typed array data");
 
@@ -472,12 +484,18 @@ export class BinaryTokenReader {
       stringTableLength = indexOffset - stringTableOffset;
     }
 
+    if (stringTableLength > MAX_SAFE_ALLOCATION) {
+      throw new Error("String table size exceeds safe allocation limit");
+    }
     const stringTableBuffer = await metaReader.read(
       stringTableOffset,
       stringTableLength
     );
     const strings = parseStringTable(stringTableBuffer);
 
+    if (indexLength > MAX_SAFE_ALLOCATION) {
+      throw new Error("Index size exceeds safe allocation limit");
+    }
     const indexBuffer = await metaReader.read(indexOffset, indexLength);
     const index = parseIndex(indexBuffer);
 
