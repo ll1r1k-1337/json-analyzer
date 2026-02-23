@@ -1,0 +1,4 @@
+## 2024-05-22 - Binary Reader DoS Protection
+**Vulnerability:** The `BinaryTokenReader` blindly trusted length fields from the binary input, allocating buffers of any size requested by the file. A malicious file could request a 2GB buffer for a token or string table, causing an immediate Denial of Service (DoS) via Out of Memory (OOM) crash.
+**Learning:** `Buffer.alloc(length)` in Node.js allocates memory eagerly. When reading binary formats, you must never pass a user-controlled length directly to an allocator without validation. Even if the file is small, the length field can be large.
+**Prevention:** We introduced `MAX_SAFE_ALLOCATION = 64MB`. All dynamic allocation sizes (token payloads, string tables, index tables) are now checked against this limit *before* any allocation or read attempt.
