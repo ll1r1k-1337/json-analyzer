@@ -1,0 +1,3 @@
+## 2024-05-24 - Async/Await Overhead in Buffered Readers
+**Learning:** Even with a buffered `FileReader` (64KB chunks), the overhead of `await`ing for small reads (e.g., 1 byte for type, then 4 bytes for payload) is significant. Reducing the number of `await` calls by speculatively reading a slightly larger chunk (16 bytes) to cover both header and payload in one go improved throughput by ~46% (from ~455k to ~665k tokens/s).
+**Action:** When designing high-frequency loops (like token readers), minimize the number of `await` calls per iteration by fetching enough data to process the entire item if possible, even if it means slightly over-reading (into a buffer).
