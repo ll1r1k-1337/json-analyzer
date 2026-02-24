@@ -9,6 +9,14 @@ import {
   TRAILER_MAGIC,
 } from "./format.js";
 
+const MAX_SAFE_ALLOCATION = 64 * 1024 * 1024; // 64MB
+
+const checkAllocationSize = (size: number): void => {
+  if (size > MAX_SAFE_ALLOCATION) {
+    throw new Error(`Allocation size ${size} exceeds safe allocation limit of ${MAX_SAFE_ALLOCATION}`);
+  }
+};
+
 type RandomAccessReader = {
   size: number;
   read(offset: number, length: number): Promise<Buffer>;
@@ -357,6 +365,7 @@ export class BinaryTokenReader {
         const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
         if (lengthBytes.length < 4) throw new Error("Unable to read number length");
         const byteLength = lengthBytes.readUInt32LE(0);
+        checkAllocationSize(byteLength);
         const numberBytes = await this.readBytes(absoluteOffset + 5n, byteLength);
         if (numberBytes.length < byteLength) throw new Error("Unable to read number bytes");
         const value = numberBytes.toString("utf8");
@@ -410,6 +419,7 @@ export class BinaryTokenReader {
           const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
           if (lengthBytes.length < 4) throw new Error("Unable to read typed array length");
           const byteLength = lengthBytes.readUInt32LE(0);
+          checkAllocationSize(byteLength);
           const data = await this.readBytes(absoluteOffset + 5n, byteLength);
           if (data.length < byteLength) throw new Error("Unable to read typed array data");
 
