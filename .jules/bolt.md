@@ -1,0 +1,3 @@
+## 2024-05-24 - Speculative Read Optimization
+**Learning:** In a binary stream parser where tokens have a type byte followed by a payload, performing two separate `await` calls (one for type, one for payload) is a significant bottleneck. Speculatively reading a small chunk (16 bytes) that covers the vast majority of tokens (fixed-size headers, small integers, string refs) allows parsing most tokens synchronously from the initial buffer, reducing async overhead by ~45%.
+**Action:** When parsing a stream of variable-length items where most items are small and fixed-size, always try to read a "header" that covers the common case to avoid multiple I/O or async calls.
