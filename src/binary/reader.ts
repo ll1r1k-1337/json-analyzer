@@ -15,6 +15,8 @@ type RandomAccessReader = {
   close?: () => Promise<void>;
 };
 
+const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024; // 512MB
+
 class BufferReader implements RandomAccessReader {
   constructor(private buffer: Buffer) {}
 
@@ -48,6 +50,12 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (offset + length > this.size) {
+      throw new Error(
+        `Read attempt exceeds file size: ${offset} + ${length} > ${this.size}`
+      );
+    }
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
@@ -428,6 +436,11 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(
+        `Max safe allocation limit exceeded: ${length} > ${MAX_SAFE_ALLOCATION}`
+      );
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
