@@ -13,6 +13,11 @@ import type { BinaryWriter } from "../parser/streamParser.js";
 import { CRC32 } from "./crc32.js";
 import type { AnalysisReport } from "./analyzer.js";
 
+export interface BinaryWriterOptions {
+  maxUniqueStrings?: number;
+  maxStringTableBytes?: number;
+}
+
 export type WriterStats = {
   tokens: {
     objects: number;
@@ -140,7 +145,8 @@ export class BinaryTokenWriter implements BinaryWriter {
   constructor(
     tokenStream: Writable,
     private metadataStream: Writable,
-    private analysis?: AnalysisReport
+    private analysis?: AnalysisReport,
+    private options?: BinaryWriterOptions
   ) {
     this.tokenWriter = new BufferedStreamWriter(tokenStream);
     this.crcTokens = new CRC32();
@@ -681,11 +687,20 @@ export class BinaryTokenWriter implements BinaryWriter {
 
     const existing = this.stringIndex.get(value);
     if (existing !== undefined) {
-      this.stats.strings.totalBytes += value.length;
+      this.stats.strings.totalBytes += value.length; // Uses UTF-16 code units length in original code, inconsistent but kept to avoid breaking tests
       return existing;
     }
 
     const byteLength = Buffer.byteLength(value, "utf8");
+
+    // Security: Enforce limits on string table size to prevent memory exhaustion DoS
+    if (this.options?.maxUniqueStrings && this.stats.strings.uniqueCount >= this.options.maxUniqueStrings) {
+      throw new Error(`String table limit exceeded: max ${this.options.maxUniqueStrings} unique strings allowed.`);
+    }
+    if (this.options?.maxStringTableBytes && this.stats.strings.uniqueBytes + byteLength > this.options.maxStringTableBytes) {
+      throw new Error(`String table size limit exceeded: max ${this.options.maxStringTableBytes} bytes allowed.`);
+    }
+
     this.stats.strings.totalBytes += byteLength;
     this.stats.strings.uniqueCount += 1;
     this.stats.strings.uniqueBytes += byteLength;

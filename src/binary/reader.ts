@@ -428,7 +428,15 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    // Security: Enforce maximum allocation limit (512MB) to prevent DoS
+    if (length > 512 * 1024 * 1024) {
+      throw new Error(`Requested allocation size (${length} bytes) exceeds maximum safe limit.`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
+    // Security: Prevent out-of-bounds reads that could expose memory or crash
+    if (offsetNumber + length > this.source.size) {
+      throw new Error(`Read out of bounds: offset ${offsetNumber} + length ${length} exceeds file size ${this.source.size}`);
+    }
     return this.source.read(offsetNumber, length);
   }
 
