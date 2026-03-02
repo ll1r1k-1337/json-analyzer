@@ -142,6 +142,9 @@ export type BinaryTokenResult = {
   byteLength: number;
 };
 
+// 512MB max allocation limit to prevent memory exhaustion DoS attacks
+const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024;
+
 const toNumber = (value: bigint, label: string): number => {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`${label} exceeds safe integer range`);
@@ -428,6 +431,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested allocation size ${length} exceeds maximum safe limit of ${MAX_SAFE_ALLOCATION}`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
