@@ -9,6 +9,9 @@ import {
   TRAILER_MAGIC,
 } from "./format.js";
 
+// Maximum allowed buffer allocation (512MB) to prevent OOM DoS
+export const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024;
+
 type RandomAccessReader = {
   size: number;
   read(offset: number, length: number): Promise<Buffer>;
@@ -48,22 +51,26 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    const safeLength = Math.min(length, Math.max(0, this.size - offset));
+    if (safeLength <= 0) return Buffer.alloc(0);
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
       offset >= this.bufferOffset &&
-      offset + length <= this.bufferOffset + this.bufferSize
+      offset + safeLength <= this.bufferOffset + this.bufferSize
     ) {
       const start = offset - this.bufferOffset;
-      const result = Buffer.allocUnsafe(length);
-      this.buffer.copy(result, 0, start, start + length);
+      const result = Buffer.allocUnsafe(safeLength);
+      this.buffer.copy(result, 0, start, start + safeLength);
       return result;
     }
 
-    if (length > this.CHUNK_SIZE || this.isBuffering) {
-      const buffer = Buffer.alloc(length);
-      const { bytesRead } = await this.handle.read(buffer, 0, length, offset);
-      return bytesRead === length ? buffer : buffer.subarray(0, bytesRead);
+    if (safeLength > this.CHUNK_SIZE || this.isBuffering) {
+      // Direct read - prevent OOM on invalid tokens near EOF
+      const buffer = Buffer.allocUnsafe(safeLength);
+      const { bytesRead } = await this.handle.read(buffer, 0, safeLength, offset);
+      return bytesRead === safeLength ? buffer : buffer.subarray(0, bytesRead);
     }
 
     this.isBuffering = true;
@@ -77,14 +84,14 @@ class FileReader implements RandomAccessReader {
       this.bufferOffset = offset;
       this.bufferSize = bytesRead;
 
-      if (bytesRead < length) {
+      if (bytesRead < safeLength) {
         const result = Buffer.allocUnsafe(bytesRead);
         this.buffer.copy(result, 0, 0, bytesRead);
         return result;
       }
 
-      const result = Buffer.allocUnsafe(length);
-      this.buffer.copy(result, 0, 0, length);
+      const result = Buffer.allocUnsafe(safeLength);
+      this.buffer.copy(result, 0, 0, safeLength);
       return result;
     } finally {
       this.isBuffering = false;
@@ -428,6 +435,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested allocation size ${length} exceeds safe limit`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
