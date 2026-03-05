@@ -1,0 +1,4 @@
+## 2025-03-05 - DoS via Uncontrolled Buffer Allocation in BinaryTokenReader
+**Vulnerability:** The `BinaryTokenReader` in `src/binary/reader.ts` parsed token lengths (e.g., for Numbers and TypedArrays) directly from the binary stream without validation, using these untrusted lengths to allocate buffers (`readBytes(offset, hugeLength)`). This allowed attackers to cause Denial of Service (DoS) by triggering Out-Of-Memory (OOM) errors.
+**Learning:** Variable-length fields parsed from binary payloads must always be bounded against a predefined, safe maximum before using them for memory allocation.
+**Prevention:** Introduce a hard safety limit (`MAX_SAFE_ALLOCATION`) for internal read methods and validate untrusted input lengths prior to any downstream resource usage like `Buffer.alloc` or file reads.
