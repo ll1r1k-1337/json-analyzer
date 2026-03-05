@@ -97,6 +97,8 @@ class FileReader implements RandomAccessReader {
   }
 }
 
+const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024; // 512MB
+
 export type BinaryHeader = {
   magic: Buffer;
   version: number;
@@ -428,6 +430,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Allocation exceeds safety limit`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
