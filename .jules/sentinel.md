@@ -1,0 +1,4 @@
+## 2024-05-24 - Buffer Allocation Denial of Service in Token Reader
+**Vulnerability:** The `BinaryTokenReader.readBytes()` function blindly trusted length fields read from binary files (e.g. for String arrays, Numbers, TypedArrays). Because `Buffer.alloc` or `Buffer.allocUnsafe` was called using this malicious length field (up to 4GB `0xFFFFFFFF`), the node process could be crashed outright by a malicious binary file by passing a huge allocation length, leading to memory exhaustion and Node/V8 assertion crashes (`args[3]->IsInt32()`).
+**Learning:** Never trust length values read from untrusted user inputs/files when allocating memory. Unchecked allocations are a vector for OOM DoS attacks.
+**Prevention:** Always introduce and enforce a maximum safe allocation size limit (`MAX_SAFE_ALLOCATION`) before calling buffer allocation functions. Validate parsed length values against this limit.
