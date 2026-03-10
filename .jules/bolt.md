@@ -1,0 +1,3 @@
+## 2024-03-10 - Speculative Read-Ahead for Fast Token Extraction
+**Learning:** In a heavily asynchronous parser like `BinaryTokenReader.readTokenAt`, executing multiple sequential `await` expressions per token (one to get the token type, another for its payload) adds significant microtask overhead which throttles read throughput. The optimal strategy in this codebase for typical tokens (most are under 16 bytes) is to speculatively read an initial chunk of 16 bytes.
+**Action:** When working on stream parsers or tight asynchronous loops, batch or speculatively fetch I/O bounds (e.g., 16-byte chunks) rather than awaiting separate granular fetches. Check the buffer slice first and only fallback to `await` if the payload exceeds the chunk size.
