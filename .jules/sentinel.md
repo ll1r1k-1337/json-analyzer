@@ -1,0 +1,4 @@
+## 2024-05-14 - Missing Allocation Bounds Check in BinaryReader
+**Vulnerability:** The `BinaryTokenReader` did not enforce bounds on the `length` of payload strings, numbers, or typed arrays before fetching them from the internal source. By supplying a maliciously large length prefix (e.g. 2GB), an attacker could cause an Out-Of-Memory (OOM) Denial of Service (DoS) attack.
+**Learning:** Even though Node.js limits maximum Buffer allocation, malicious payloads can still exhaust heap memory or trigger synchronous V8 crashes before the error can be caught effectively if upper-bounds are absent on stream parsers.
+**Prevention:** Implement a strict `MAX_SAFE_ALLOCATION` limit (e.g. 512MB) on all dynamic buffer allocations or stream chunk reads derived from untrusted metadata/lengths to fail securely.
