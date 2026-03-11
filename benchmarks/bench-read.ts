@@ -4,8 +4,8 @@ import { BinaryTokenReader } from "../src/binary/reader.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.join(dirname, "output");
-const binPath = path.join(outputDir, "generated-5000.bin");
-const metaPath = path.join(outputDir, "generated-5000.meta");
+const binPath = path.join(outputDir, "memory-test-200000.bin");
+const metaPath = path.join(outputDir, "memory-test-200000.meta");
 
 async function main() {
   console.log("Starting benchmark...");
