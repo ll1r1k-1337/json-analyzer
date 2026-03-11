@@ -1,0 +1,3 @@
+## 2024-03-11 - Speculative Reading for Stream Token Parsing
+**Learning:** In asynchronous token parsers reading from binary streams or buffers, fetching data token-by-token (i.e. await for 1-byte type, await for N-byte payload) creates significant asynchronous microtask overhead, becoming a major performance bottleneck for large throughput workloads.
+**Action:** When implementing binary parsers, fetch data speculatively in fixed-size chunks (e.g., 16 bytes) that cover the token type and the most common payloads in a single `await`. Then read from this loaded chunk synchronously for small items or fallback to `await` for larger payloads only. This effectively minimizes microtask creation and boosts overall parsing throughput.
