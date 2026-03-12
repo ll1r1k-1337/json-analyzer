@@ -1,0 +1,4 @@
+## 2024-05-18 - Missing upper bound check on buffer allocation from binary payloads
+**Vulnerability:** When parsing binary structures containing dynamic lengths (like strings or typed arrays), reading the specified `length` directly and allocating a buffer of that size (e.g., `Buffer.alloc(length)`) without an upper bound check allows an attacker to construct a malicious binary file indicating a massive length (e.g., 4GB) to cause process memory exhaustion and denial of service (OOM DoS).
+**Learning:** Never trust length descriptors from user-controlled binary files directly for buffer allocations. Even if the overall file is small, an internal structure can claim it needs gigabytes of memory.
+**Prevention:** Always implement a sane maximum safe allocation limit (e.g., `MAX_SAFE_ALLOCATION`) for dynamically-sized payload reads, and throw an error if the requested length exceeds this threshold before allocating.

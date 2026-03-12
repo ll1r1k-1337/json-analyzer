@@ -48,6 +48,10 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested file read length exceeds safe allocation limit: ${length}`);
+    }
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
@@ -141,6 +145,10 @@ export type BinaryTokenResult = {
   token: BinaryToken;
   byteLength: number;
 };
+
+// Security: Max safe allocation limit (512MB) to prevent OOM DoS attacks
+// from maliciously crafted payload lengths.
+const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024;
 
 const toNumber = (value: bigint, label: string): number => {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -428,6 +436,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested payload length exceeds safe allocation limit: ${length}`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
