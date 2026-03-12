@@ -1,0 +1,3 @@
+## 2025-03-12 - [Speculative reads for asynchronous binary token reading]
+**Learning:** Performing multiple independent asynchronous `await` calls per token (e.g. reading a 1-byte header, then a 4-byte payload) creates significant microtask overhead, drastically limiting maximum token throughput.
+**Action:** Use a speculative read strategy that fetches a slightly larger chunk (e.g. 16 bytes) in a single async operation. The chunk typically contains both the token header and payload. Extract data from the chunk synchronously when possible, falling back to an explicit read only when the payload exceeds the chunk.

@@ -322,12 +322,15 @@ export class BinaryTokenReader {
     }
 
     const absoluteOffset = tokenStreamOffset + offset;
-    const firstByte = await this.readBytes(absoluteOffset, 1);
-    if (firstByte.length < 1) {
+    // Speculative read: fetch 16 bytes upfront to minimize async operations
+    const SPECULATIVE_READ_SIZE = 16;
+    const chunk = await this.readBytes(absoluteOffset, SPECULATIVE_READ_SIZE);
+
+    if (chunk.length < 1) {
       throw new Error("Unable to read token type");
     }
 
-    const type = firstByte.readUInt8(0) as TokenType;
+    const type = chunk.readUInt8(0) as TokenType;
     switch (type) {
       case TokenType.StartObject:
       case TokenType.EndObject:
@@ -342,7 +345,7 @@ export class BinaryTokenReader {
         return { token: { type, value: null }, byteLength: 1 };
       case TokenType.Key:
       case TokenType.String: {
-        const payload = await this.readBytes(absoluteOffset + 1n, 4);
+        const payload = chunk.length >= 5 ? chunk.subarray(1, 5) : await this.readBytes(absoluteOffset + 1n, 4);
         if (payload.length < 4) {
           throw new Error("Unable to read string table index");
         }
@@ -354,16 +357,20 @@ export class BinaryTokenReader {
         return { token: { type, value }, byteLength: 5 };
       }
       case TokenType.Number: {
-        const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
+        const lengthBytes = chunk.length >= 5 ? chunk.subarray(1, 5) : await this.readBytes(absoluteOffset + 1n, 4);
         if (lengthBytes.length < 4) throw new Error("Unable to read number length");
         const byteLength = lengthBytes.readUInt32LE(0);
-        const numberBytes = await this.readBytes(absoluteOffset + 5n, byteLength);
+
+        const numberBytes = chunk.length >= 5 + byteLength
+          ? chunk.subarray(5, 5 + byteLength)
+          : await this.readBytes(absoluteOffset + 5n, byteLength);
         if (numberBytes.length < byteLength) throw new Error("Unable to read number bytes");
+
         const value = numberBytes.toString("utf8");
         return { token: { type, value }, byteLength: 5 + byteLength };
       }
       case TokenType.NumberRef: {
-        const payload = await this.readBytes(absoluteOffset + 1n, 4);
+        const payload = chunk.length >= 5 ? chunk.subarray(1, 5) : await this.readBytes(absoluteOffset + 1n, 4);
         if (payload.length < 4) throw new Error("Unable to read string table index");
         const index = payload.readUInt32LE(0);
         const value = this.stringTable[index];
@@ -372,27 +379,27 @@ export class BinaryTokenReader {
       }
       case TokenType.Int8:
       case TokenType.Uint8: {
-        const payload = await this.readBytes(absoluteOffset + 1n, 1);
+        const payload = chunk.length >= 2 ? chunk.subarray(1, 2) : await this.readBytes(absoluteOffset + 1n, 1);
         if (payload.length < 1) throw new Error("Unable to read value");
         const value = type === TokenType.Int8 ? payload.readInt8(0) : payload.readUInt8(0);
         return { token: { type: TokenType.Number, value: String(value) }, byteLength: 2 };
       }
       case TokenType.Int16:
       case TokenType.Uint16: {
-        const payload = await this.readBytes(absoluteOffset + 1n, 2);
+        const payload = chunk.length >= 3 ? chunk.subarray(1, 3) : await this.readBytes(absoluteOffset + 1n, 2);
         if (payload.length < 2) throw new Error("Unable to read value");
         const value = type === TokenType.Int16 ? payload.readInt16LE(0) : payload.readUInt16LE(0);
         return { token: { type: TokenType.Number, value: String(value) }, byteLength: 3 };
       }
       case TokenType.Int32:
       case TokenType.Uint32: {
-        const payload = await this.readBytes(absoluteOffset + 1n, 4);
+        const payload = chunk.length >= 5 ? chunk.subarray(1, 5) : await this.readBytes(absoluteOffset + 1n, 4);
         if (payload.length < 4) throw new Error("Unable to read value");
         const value = type === TokenType.Int32 ? payload.readInt32LE(0) : payload.readUInt32LE(0);
         return { token: { type: TokenType.Number, value: String(value) }, byteLength: 5 };
       }
       case TokenType.Float64: {
-        const payload = await this.readBytes(absoluteOffset + 1n, 8);
+        const payload = chunk.length >= 9 ? chunk.subarray(1, 9) : await this.readBytes(absoluteOffset + 1n, 8);
         if (payload.length < 8) throw new Error("Unable to read Float64 value");
         const value = payload.readDoubleLE(0);
         return { token: { type: TokenType.Number, value: String(value) }, byteLength: 9 };
@@ -407,10 +414,13 @@ export class BinaryTokenReader {
       case TokenType.Int32Array:
       case TokenType.Float32Array:
       case TokenType.Float64Array: {
-          const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
+          const lengthBytes = chunk.length >= 5 ? chunk.subarray(1, 5) : await this.readBytes(absoluteOffset + 1n, 4);
           if (lengthBytes.length < 4) throw new Error("Unable to read typed array length");
           const byteLength = lengthBytes.readUInt32LE(0);
-          const data = await this.readBytes(absoluteOffset + 5n, byteLength);
+
+          const data = chunk.length >= 5 + byteLength
+            ? chunk.subarray(5, 5 + byteLength)
+            : await this.readBytes(absoluteOffset + 5n, byteLength);
           if (data.length < byteLength) throw new Error("Unable to read typed array data");
 
           return { token: { type, value: data }, byteLength: 5 + byteLength };
