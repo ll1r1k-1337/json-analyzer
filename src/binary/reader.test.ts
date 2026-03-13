@@ -99,4 +99,34 @@ describe("BinaryTokenReader", () => {
 
     await reader.close();
   });
+
+  it("rejects malicious token lengths exceeding MAX_SAFE_ALLOCATION", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "json-analyzer-reader-malicious-"));
+    tempDirs.push(tempDir);
+    const outputBinPath = path.join(tempDir, "output.bin");
+    const outputMetaPath = path.join(tempDir, "output.meta");
+
+    // Write a dummy JSON meta file
+    await writeFile(outputMetaPath, JSON.stringify({
+      magic: "JSAN",
+      version: 1,
+      stringTable: [],
+      index: [],
+      tokenStreamLength: "10",
+      tokenStreamChecksum: 0
+    }));
+
+    // Write a malicious binary token (TokenType.Number) with length 0xFFFFFFFF
+    const maliciousBuf = Buffer.alloc(10);
+    maliciousBuf.writeUInt8(0x07, 0); // TokenType.Number
+    maliciousBuf.writeUInt32LE(0xFFFFFFFF, 1);
+    await writeFile(outputBinPath, maliciousBuf);
+
+    const reader = await BinaryTokenReader.fromFiles(outputMetaPath, outputBinPath);
+
+    // Reading should throw a safe allocation error instead of crashing
+    await expect(reader.readTokenAt(0n)).rejects.toThrow("exceeds safe allocation limit");
+
+    await reader.close();
+  });
 });
