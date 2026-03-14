@@ -9,6 +9,9 @@ import {
   TRAILER_MAGIC,
 } from "./format.js";
 
+// Security: Prevent Out-Of-Memory (OOM) Denial of Service attacks from maliciously crafted sizes
+const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024; // 512MB
+
 type RandomAccessReader = {
   size: number;
   read(offset: number, length: number): Promise<Buffer>;
@@ -48,6 +51,10 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested read length (${length} bytes) exceeds maximum safe allocation limit`);
+    }
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
@@ -428,6 +435,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested token read length (${length} bytes) exceeds maximum safe allocation limit`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
