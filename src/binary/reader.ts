@@ -9,6 +9,8 @@ import {
   TRAILER_MAGIC,
 } from "./format.js";
 
+const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024; // 512MB
+
 type RandomAccessReader = {
   size: number;
   read(offset: number, length: number): Promise<Buffer>;
@@ -48,6 +50,10 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested read length ${length} exceeds maximum safe allocation limit`);
+    }
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
@@ -192,6 +198,9 @@ const parseStringTable = (buffer: Buffer): string[] => {
       throw new Error("Unexpected end of string table");
     }
     const byteLength = buffer.readUInt32LE(offset);
+    if (byteLength > MAX_SAFE_ALLOCATION) {
+      throw new Error(`String length ${byteLength} exceeds maximum safe allocation limit`);
+    }
     offset += 4;
     if (offset + byteLength > buffer.length) {
       throw new Error("Unexpected end of string table data");
@@ -428,6 +437,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested read length ${length} exceeds maximum safe allocation limit`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
