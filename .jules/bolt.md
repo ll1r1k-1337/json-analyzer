@@ -1,0 +1,3 @@
+## 2026-03-15 - Optimize FileReader.read with Buffer.allocUnsafe
+**Learning:** Using `Buffer.allocUnsafe` instead of `Buffer.alloc` for reading into intermediate buffers skips zero-filling memory, offering a significant performance boost in IO paths. However, doing so requires careful handling when the read bytes are fewer than the allocated length to avoid memory disclosure vulnerabilities.
+**Action:** Always check the returned `bytesRead` from a file descriptor read when using `Buffer.allocUnsafe`. If it's less than the allocated size, copy the read segment into a newly, precisely sized buffer before returning to prevent leaking uninitialized memory from the remaining buffer segment.

@@ -61,9 +61,16 @@ class FileReader implements RandomAccessReader {
     }
 
     if (length > this.CHUNK_SIZE || this.isBuffering) {
-      const buffer = Buffer.alloc(length);
+      // Opt-in for performance. Using uninitialized buffer for faster allocation,
+      // but ensure we only return the part that was successfully read to avoid memory disclosure.
+      const buffer = Buffer.allocUnsafe(length);
       const { bytesRead } = await this.handle.read(buffer, 0, length, offset);
-      return bytesRead === length ? buffer : buffer.subarray(0, bytesRead);
+      // It is important here to clear unread memory or simply slice out what we read.
+      // We return a copy of the read segment to prevent leaking uninitialized data
+      if (bytesRead === length) return buffer;
+      const result = Buffer.allocUnsafe(bytesRead);
+      buffer.copy(result, 0, 0, bytesRead);
+      return result;
     }
 
     this.isBuffering = true;
