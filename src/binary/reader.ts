@@ -1,4 +1,6 @@
 import { open } from "node:fs/promises";
+export const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024; // 512MB
+
 import {
   FORMAT_MAGIC,
   FORMAT_VERSION,
@@ -23,6 +25,9 @@ class BufferReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error("Requested allocation size exceeds safe limit");
+    }
     return this.buffer.subarray(offset, offset + length);
   }
 }
@@ -48,6 +53,10 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error("Requested allocation size exceeds safe limit");
+    }
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
@@ -428,6 +437,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error("Requested allocation size exceeds safe limit");
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
