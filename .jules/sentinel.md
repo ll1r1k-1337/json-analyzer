@@ -1,0 +1,4 @@
+## 2024-05-30 - OOM DoS via Unbounded Buffer Allocations
+**Vulnerability:** The binary format readers (`FileReader.read`, `BufferReader.read`, and `BinaryTokenReader.readBytes`) previously lacked size bounds checks when reading variable-length values like Strings or TypedArrays, allowing maliciously crafted length prefixes (e.g., from untrusted token streams) to request gigabytes of memory.
+**Learning:** Even though `Buffer.allocUnsafe` improves performance over zero-filling, any `Buffer.alloc*` operation triggered directly by parsed length values without an upper limit creates a direct Out-Of-Memory (OOM) Denial of Service (DoS) vulnerability.
+**Prevention:** Implement a strict global `MAX_SAFE_ALLOCATION` boundary check for all I/O boundary reader methods prior to allocating buffers or performing underlying string operations based on payload lengths.
