@@ -1,0 +1,4 @@
+## 2026-03-19 - Enforce Memory Allocation Limits in BinaryReader
+**Vulnerability:** A Denial of Service (DoS) vulnerability existed in `FileReader` and `BinaryTokenReader` where dynamically reading buffer lengths allowed a maliciously constructed binary file to request excessively large memory allocations (e.g., passing a 4GB length). This would exhaust the V8 memory limits via `Buffer.alloc()` / `Buffer.allocUnsafe()`, leading to an Out-Of-Memory (OOM) crash.
+**Learning:** File parsers and binary decoders must never trust user-supplied length fields for memory allocation without prior bounds checking, even if the runtime or Node.js might eventually throw. Controlled failure allows the system to remain stable.
+**Prevention:** Implement a hard-coded strict safe allocation limit (`MAX_SAFE_ALLOCATION = 512MB`) and validate all requested read lengths against this limit prior to invoking any `Buffer` allocation methods.
