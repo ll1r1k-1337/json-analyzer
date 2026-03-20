@@ -13,6 +13,11 @@ import type { BinaryWriter } from "../parser/streamParser.js";
 import { CRC32 } from "./crc32.js";
 import type { AnalysisReport } from "./analyzer.js";
 
+export type BinaryWriterOptions = {
+  maxUniqueStrings?: number;
+  maxStringTableBytes?: number;
+};
+
 export type WriterStats = {
   tokens: {
     objects: number;
@@ -140,7 +145,8 @@ export class BinaryTokenWriter implements BinaryWriter {
   constructor(
     tokenStream: Writable,
     private metadataStream: Writable,
-    private analysis?: AnalysisReport
+    private analysis?: AnalysisReport,
+    private options?: BinaryWriterOptions
   ) {
     this.tokenWriter = new BufferedStreamWriter(tokenStream);
     this.crcTokens = new CRC32();
@@ -686,6 +692,18 @@ export class BinaryTokenWriter implements BinaryWriter {
     }
 
     const byteLength = Buffer.byteLength(value, "utf8");
+
+    // Security limits to prevent OOM DoS attacks
+    const maxUniqueStrings = this.options?.maxUniqueStrings ?? 1_000_000;
+    const maxStringTableBytes = this.options?.maxStringTableBytes ?? 100 * 1024 * 1024; // 100MB Default
+
+    if (this.stats.strings.uniqueCount >= maxUniqueStrings) {
+      throw new Error(`Security Error: Maximum unique string limit (${maxUniqueStrings}) exceeded (OOM protection)`);
+    }
+    if (this.stats.strings.uniqueBytes + byteLength > maxStringTableBytes) {
+      throw new Error(`Security Error: Maximum string table size (${maxStringTableBytes} bytes) exceeded (OOM protection)`);
+    }
+
     this.stats.strings.totalBytes += byteLength;
     this.stats.strings.uniqueCount += 1;
     this.stats.strings.uniqueBytes += byteLength;
