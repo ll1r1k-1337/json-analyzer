@@ -75,6 +75,48 @@ describe("BinaryTokenReader", () => {
     }
   });
 
+  it("rejects reads exceeding safe allocation limits to prevent OOM", async () => {
+    // Generate a minimal valid binary so the reader can construct itself.
+    // For this test, we can use an empty JSON object.
+    const tempDir = await mkdtemp(path.join(tmpdir(), "json-analyzer-reader-oom-"));
+    tempDirs.push(tempDir);
+    const inputPath = path.join(tempDir, "input.json");
+    const outputBinPath = path.join(tempDir, "output.bin");
+    const outputMetaPath = path.join(tempDir, "output.meta");
+
+    await writeFile(inputPath, "{}", "utf8");
+
+    const readStream = createReadStream(inputPath);
+    const tokenStream = createWriteStream(outputBinPath);
+    const metadataStream = createWriteStream(outputMetaPath);
+    const writer = new BinaryTokenWriter(tokenStream, metadataStream);
+
+    await parseJsonStream(readStream, writer);
+    await writer.finalize();
+    tokenStream.end();
+
+    await new Promise<void>(resolve => tokenStream.on('finish', resolve));
+    await new Promise<void>(resolve => metadataStream.on('finish', resolve));
+
+    // Manually manipulate the .bin file to add a string token with a malicious length
+    // Malicious token: TokenType.String (0x06) + some index
+    // Wait, the String token uses string table index, its payload is fixed (4 bytes).
+    // The vulnerability is in reading TypedArrays where length is specified in the token.
+    // Let's create a dummy TypedArray token with 2GB length.
+    const reader = await BinaryTokenReader.fromFiles(outputMetaPath, outputBinPath);
+
+    // Bypass private access to call readBytes directly to simulate processing a malicious token payload length
+    // In BinaryTokenReader.readTokenAt:
+    // case TokenType.Uint8Array:
+    //    const lengthBytes = await this.readBytes(absoluteOffset + 1n, 4);
+    //    const byteLength = lengthBytes.readUInt32LE(0);
+    //    const data = await this.readBytes(absoluteOffset + 5n, byteLength); <-- vulnerability
+
+    await expect((reader as any).readBytes(0n, 1024 * 1024 * 1024)).rejects.toThrow(/exceeds safe allocation limit/);
+
+    await reader.close();
+  });
+
   it("handles concurrent reads safely", async () => {
     const tempDir = tempDirs[0]; // Reuse existing temp dir with files
     const outputBinPath = path.join(tempDir, "output.bin");
