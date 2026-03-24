@@ -23,6 +23,12 @@ class BufferReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    // We only enforce MAX_SAFE_ALLOCATION because this implementation
+    // is consistent with the rest of the application that enforces this.
+    // It's effectively defense-in-depth even though we just return a subarray.
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested allocation size (${length}) exceeds maximum safe limit (${MAX_SAFE_ALLOCATION})`);
+    }
     return this.buffer.subarray(offset, offset + length);
   }
 }
@@ -48,6 +54,10 @@ class FileReader implements RandomAccessReader {
   }
 
   async read(offset: number, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested allocation size (${length}) exceeds maximum safe limit (${MAX_SAFE_ALLOCATION})`);
+    }
+
     if (
       !this.isBuffering &&
       this.bufferOffset !== -1 &&
@@ -96,6 +106,8 @@ class FileReader implements RandomAccessReader {
     this.buffer = Buffer.alloc(0);
   }
 }
+
+const MAX_SAFE_ALLOCATION = 512 * 1024 * 1024; // 512MB
 
 export type BinaryHeader = {
   magic: Buffer;
@@ -428,6 +440,9 @@ export class BinaryTokenReader {
   }
 
   private async readBytes(offset: bigint, length: number): Promise<Buffer> {
+    if (length > MAX_SAFE_ALLOCATION) {
+      throw new Error(`Requested allocation size (${length}) exceeds maximum safe limit (${MAX_SAFE_ALLOCATION})`);
+    }
     const offsetNumber = toNumber(offset, "Offset");
     return this.source.read(offsetNumber, length);
   }
