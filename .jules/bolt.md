@@ -1,0 +1,3 @@
+## 2024-05-24 - Speculative Reading for Stream Parsers
+**Learning:** In V8, performing `await` operations in a tight loop for small individual byte reads (e.g., `read(1)` then `read(4)`) introduces substantial asynchronous microtask overhead. Fetching token headers and short payloads separately degrades token read throughput drastically.
+**Action:** Always batch or speculatively fetch I/O bounds (e.g., reading 16 bytes upfront) to cover most common fixed-width token types in a single `await`, falling back to separate reads only for large variable-width data. This reduces microtasks significantly.
