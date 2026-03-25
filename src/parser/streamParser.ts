@@ -66,6 +66,28 @@ const createWriterSink = (writer: BinaryWriter): Writable =>
         callback(error as Error);
       }
     },
+    writev(chunks: { chunk: JsonToken }[], callback) {
+      let promise: Promise<void> | void = undefined;
+      try {
+        for (const { chunk } of chunks) {
+          if (promise) {
+            promise = promise.then(() => writeToken(writer, chunk));
+          } else {
+            const result = writeToken(writer, chunk);
+            if (result && typeof result.then === 'function') {
+              promise = result;
+            }
+          }
+        }
+        if (promise) {
+          promise.then(() => callback(), (err) => callback(err));
+        } else {
+          callback();
+        }
+      } catch (error) {
+        callback(error as Error);
+      }
+    },
   });
 
 export const createStreamParser = (writer: BinaryWriter): { parser: Transform; sink: Writable } => {

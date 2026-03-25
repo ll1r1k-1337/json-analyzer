@@ -1,0 +1,3 @@
+## 2024-05-24 - Batching Node.js Stream Writes (writev)
+**Learning:** Adding a `writev(chunks, callback)` method to custom `Writable` streams in Node.js allows for batch processing of streamed data. For highly granular stream parsers (like `stream-json` token streams), processing chunks individually in `write` invokes significant Node.js internal and asynchronous microtask overhead per token.
+**Action:** Always implement `writev` on `Writable` streams that act as sinks in performance-critical data pipelines, as it allows for processing arrays of chunks sequentially or concurrently in a tight loop instead of scheduling individual stream callbacks.
