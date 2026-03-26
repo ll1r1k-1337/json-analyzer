@@ -21,6 +21,7 @@ export class CRC32 {
   }
 
   update(buffer: Buffer): void {
+    if (buffer.length === 0) return;
     // Use native node:zlib crc32.
     // The native implementation uses the standard CRC32 algorithm (init=0xFFFFFFFF, xorout=0xFFFFFFFF).
     // Our implementation uses init=0, xorout=0.
