@@ -99,4 +99,40 @@ describe("BinaryTokenReader", () => {
 
     await reader.close();
   });
+
+  it("throws an error when read length exceeds MAX_SAFE_ALLOCATION", async () => {
+    // We can simulate an attack where a string or array length exceeds the safe allocation limit.
+    const tempDir = await mkdtemp(path.join(tmpdir(), "json-analyzer-reader-oom-"));
+    tempDirs.push(tempDir);
+    const outputBinPath = path.join(tempDir, "output.bin");
+    const outputMetaPath = path.join(tempDir, "output.meta");
+
+    const payload = JSON.stringify({
+      id: 1,
+    });
+
+    const inputPath = path.join(tempDir, "input.json");
+    await writeFile(inputPath, payload, "utf8");
+
+    const readStream = createReadStream(inputPath);
+    const tokenStream = createWriteStream(outputBinPath);
+    const metadataStream = createWriteStream(outputMetaPath);
+    const writer = new BinaryTokenWriter(tokenStream, metadataStream);
+
+    await parseJsonStream(readStream, writer);
+    await writer.finalize();
+    tokenStream.end();
+
+    await new Promise<void>(resolve => tokenStream.on('finish', resolve));
+    await new Promise<void>(resolve => metadataStream.on('finish', resolve));
+
+    const reader = await BinaryTokenReader.fromFiles(outputMetaPath, outputBinPath);
+
+    // Call the internal readBytes method with a massive length.
+    // The safest way to test is to use the exposed reader logic, or invoke a private method.
+    // Since readBytes is private, we will mock or call it via 'any'.
+    await expect((reader as any).readBytes(0n, 512 * 1024 * 1024 + 1)).rejects.toThrow(/exceeds MAX_SAFE_ALLOCATION/);
+
+    await reader.close();
+  });
 });
