@@ -1,0 +1,11 @@
+--- benchmarks/bench-read.ts
++++ benchmarks/bench-read.ts
+@@ -15,7 +15,7 @@
+   let count = 0;
+
+   while (offset < trailer.tokenStreamLength) {
+-    const { token, byteLength } = await reader.readTokenAt(offset);
++    const { byteLength } = await reader.readTokenAt(offset);
+     count++;
+     offset += BigInt(byteLength);
+   }

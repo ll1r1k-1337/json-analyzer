@@ -18,7 +18,7 @@ const runBench = async () => {
   let count = 0;
 
   while (offset < trailer.tokenStreamLength) {
-    const { byteLength } = await reader.readTokenAt(offset);
+    const { token, byteLength } = await reader.readTokenAt(offset);
     count++;
     offset += BigInt(byteLength);
   }
